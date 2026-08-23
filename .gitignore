@@ -1,0 +1,7 @@
+# credenciais locais opcionais (padroes ja hardcoded)
+.env
+
+# lixo de SO/editor
+Thumbs.db
+.DS_Store
+.opencode/

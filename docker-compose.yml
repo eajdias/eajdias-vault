@@ -1,0 +1,39 @@
+name: sank-vault
+
+services:
+  # Baixa os favoritos do Sankaku. Uso manual:
+  #   docker compose run --rm downloader
+  # Amostra pequena (teste):
+  #   docker compose run --rm -e GDL_EXTRA_ARGS="--range 1-3 --sleep-request 1" downloader
+  downloader:
+    build: ./downloader
+    profiles: ["manual"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      GDL_EXTRA_ARGS: ${GDL_EXTRA_ARGS:-}
+    volumes:
+      - vault_media:/data/media
+      - vault_db:/data/db
+    restart: "no"
+
+  # Web UI local com login: http://127.0.0.1:8090
+  viewer:
+    build: ./viewer
+    ports:
+      - "127.0.0.1:8090:8080"
+    environment:
+      VIEWER_PASSWORD: ${VIEWER_PASSWORD:-sankvault}
+      MEDIA_DIR: /data/media
+      THUMB_DIR: /data/thumbs
+      ADDR: ":8080"
+    volumes:
+      - vault_media:/data/media:ro
+      - vault_thumbs:/data/thumbs
+    restart: unless-stopped
+
+volumes:
+  vault_media:   # midias sem extensao (dentro do disco do Docker/WSL2)
+  vault_db:      # archive.sqlite -> deduplicacao entre execucoes
+  vault_thumbs:  # cache de miniaturas do viewer

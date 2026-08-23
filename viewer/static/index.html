@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>sank-vault</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <span class="logo">sank<b>&middot;vault</b></span>
+  <input id="q" type="search" placeholder="buscar..." autocomplete="off">
+  <select id="sort" title="ordenar por"></select>
+  <span id="count"></span>
+  <button type="button" id="logout">sair</button>
+</header>
+
+<nav id="tabs">
+  <button type="button" class="tab active" data-cat="all">Geral <span class="tcount"></span></button>
+  <button type="button" class="tab" data-cat="image">Imagens <span class="tcount"></span></button>
+  <button type="button" class="tab" data-cat="gif">GIFs <span class="tcount"></span></button>
+  <button type="button" class="tab" data-cat="video">Vídeos <span class="tcount"></span></button>
+  <span id="probenote" hidden></span>
+</nav>
+
+<main id="grid"></main>
+<div id="empty" hidden>nada encontrado</div>
+<div id="sentinel"></div>
+
+<div id="lightbox" hidden>
+  <div id="lb-content"></div>
+  <button type="button" class="nav" id="lb-prev">&#8249;</button>
+  <button type="button" class="nav" id="lb-next">&#8250;</button>
+  <a id="lb-download" href="#" download>baixar</a>
+  <button type="button" id="lb-close">&times;</button>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
