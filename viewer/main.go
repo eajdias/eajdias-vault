@@ -53,12 +53,28 @@ type server struct {
 	durs   *durationStore
 	docker *dockerMon
 
+	fmu   sync.Mutex
+	fails map[string]*failRec // rate limit de login por IP
+
 	probeMu    sync.Mutex
 	probeLeft  int // videos na fila de analise de duracao
 	probeTotal int
 
 	tmu  sync.Mutex
 	busy map[string]bool // geracao de thumb em andamento
+}
+
+// noindex: exposto via dominio publico (cloudflared), nao deve ser indexado
+func noindex(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+		if r.URL.Path == "/robots.txt" {
+			w.Header().Set("Content-Type", "text/plain")
+			w.Write([]byte("User-agent: *\nDisallow: /\n"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func env(k, def string) string {
@@ -98,6 +114,7 @@ func main() {
 		durs:     newDurationStore(filepath.Join(thumbDir, "meta.json")),
 		docker:   newDockerMon(),
 		busy:     map[string]bool{},
+		fails:    map[string]*failRec{},
 	}
 
 	mux := http.NewServeMux()
@@ -118,7 +135,7 @@ func main() {
 	log.Printf("[sank-vault] viewer ouvindo em %s (midia=%s)", addr, mediaDir)
 
 	srv.startDurationProber()
-	log.Fatal(http.ListenAndServe(addr, mux))
+	log.Fatal(http.ListenAndServe(addr, noindex(mux)))
 }
 
 // ---- indice / listagem -----------------------------------------------------
@@ -324,7 +341,7 @@ func (s *server) handleMedia(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", mime)
 	// id_md5 e unico e imutavel: o browser pode guardar para sempre
 	// (reabrir um video do lightbox nao re-transfere nada)
-	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	w.Header().Set("Content-Disposition", "inline; filename*=UTF-8''"+url.PathEscape(name))
 	// ServeContent cuida de Range/206/If-Range -> seeking funciona nos videos.
 	http.ServeContent(w, r, "", fi.ModTime(), f)

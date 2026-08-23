@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -39,7 +40,7 @@ func (s *server) sign(exp int64) string {
 	return hex.EncodeToString(m.Sum(nil))
 }
 
-func (s *server) sessionCookie() *http.Cookie {
+func (s *server) sessionCookie(r *http.Request) *http.Cookie {
 	exp := time.Now().Add(30 * 24 * time.Hour).Unix()
 	return &http.Cookie{
 		Name:     cookieName,
@@ -48,6 +49,9 @@ func (s *server) sessionCookie() *http.Cookie {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   30 * 24 * 3600,
+		// atras do cloudflared o acesso e https (X-Forwarded-Proto: https);
+		// direto pelo tailscale e http puro — o Secure so vale no primeiro caso
+		Secure: r.Header.Get("X-Forwarded-Proto") == "https" || r.TLS != nil,
 	}
 }
 
@@ -94,18 +98,86 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	msg := ""
 	status := http.StatusOK
 	if r.Method == http.MethodPost {
+		ip := clientIP(r)
+		if !s.loginAllowed(ip) {
+			log.Printf("[sank-vault] login bloqueado (rate limit) para %s", ip)
+			w.Header().Set("Retry-After", "600")
+			http.Error(w, "muitas tentativas — tente novamente em alguns minutos", http.StatusTooManyRequests)
+			return
+		}
 		if r.ParseForm() == nil && s.checkPassword(r.FormValue("password")) {
-			http.SetCookie(w, s.sessionCookie())
+			s.loginOK(ip)
+			http.SetCookie(w, s.sessionCookie(r))
 			http.Redirect(w, r, "/", http.StatusFound)
 			return
 		}
-		log.Printf("[sank-vault] tentativa de login invalida de %s", r.RemoteAddr)
+		s.loginFail(ip)
+		log.Printf("[sank-vault] tentativa de login invalida de %s", ip)
 		msg = `<p class="erro">senha incorreta</p>`
 		status = http.StatusUnauthorized
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	fmt.Fprintf(w, loginHTML, msg)
+}
+
+// ---- rate limit simples de login (anti brute-force p/ exposicao publica) ----
+
+const (
+	loginMaxFails   = 5                // tentativas erradas...
+	loginBlockAfter = 10 * time.Minute // ...dentro desta janela => bloqueia por ela
+)
+
+type failRec struct {
+	count    int
+	lastFail time.Time
+}
+
+// clientIP: atraz do cloudflared o real vem no header; local cai no RemoteAddr
+func clientIP(r *http.Request) string {
+	if v := r.Header.Get("Cf-Connecting-Ip"); v != "" {
+		return v
+	}
+	if v := r.Header.Get("X-Real-Ip"); v != "" {
+		return v
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+func (s *server) loginAllowed(ip string) bool {
+	s.fmu.Lock()
+	defer s.fmu.Unlock()
+	rec, ok := s.fails[ip]
+	if !ok {
+		return true
+	}
+	if time.Since(rec.lastFail) > loginBlockAfter {
+		delete(s.fails, ip)
+		return true
+	}
+	return rec.count < loginMaxFails
+}
+
+func (s *server) loginFail(ip string) {
+	s.fmu.Lock()
+	defer s.fmu.Unlock()
+	rec, ok := s.fails[ip]
+	if !ok || time.Since(rec.lastFail) > loginBlockAfter {
+		s.fails[ip] = &failRec{count: 1, lastFail: time.Now()}
+		return
+	}
+	rec.count++
+	rec.lastFail = time.Now()
+}
+
+func (s *server) loginOK(ip string) {
+	s.fmu.Lock()
+	delete(s.fails, ip)
+	s.fmu.Unlock()
 }
 
 func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
