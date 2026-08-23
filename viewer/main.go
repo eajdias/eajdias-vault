@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"io/fs"
 	"log"
@@ -23,6 +26,7 @@ var (
 	indexHTML []byte
 	appJS     []byte
 	styleCSS  []byte
+	assetVer  string
 )
 
 // Item descreve uma midia do vault para a API/UI.
@@ -68,6 +72,13 @@ func main() {
 	indexHTML, _ = fs.ReadFile(staticFS, "static/index.html")
 	appJS, _ = fs.ReadFile(staticFS, "static/app.js")
 	styleCSS, _ = fs.ReadFile(staticFS, "static/style.css")
+
+	// Versão dos assets: hash curto do JS+CSS injetado nas URLs (?v=...).
+	// Qualquer mudança no front muda a URL => cache antigo nunca é reutilizado,
+	// nem por caches que ignoram Cache-Control (causa de bugs "fantasma").
+	sum := sha256.Sum256(append(append([]byte{}, appJS...), styleCSS...))
+	assetVer = hex.EncodeToString(sum[:8])
+	indexHTML = bytes.ReplaceAll(indexHTML, []byte("__VER__"), []byte(assetVer))
 
 	mediaDir := env("MEDIA_DIR", "/data/media")
 	thumbDir := env("THUMB_DIR", "/data/thumbs")
@@ -317,6 +328,7 @@ func (s *server) handleMedia(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleRoot(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(indexHTML)
 }
