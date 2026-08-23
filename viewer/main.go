@@ -129,8 +129,8 @@ func (s *server) rescan() ([]Item, map[string]string) {
 			return nil
 		}
 		name := d.Name()
-		if strings.HasPrefix(name, ".") {
-			return nil
+		if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".part") {
+			return nil // ocultos e downloads incompletos do gallery-dl
 		}
 		info, err := d.Info()
 		if err != nil {

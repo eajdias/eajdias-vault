@@ -221,6 +221,7 @@ header {
   padding-top: 12vh;
   z-index: 60;
 }
+#dlpanel[hidden] { display: none; }
 .dlcard {
   width: min(430px, 92vw);
   background: #15161d;

@@ -124,7 +124,8 @@ function card(it) {
   if (it.kind === "video") div.appendChild(chip("▶", "play"));
   if (it.duration > 0) div.appendChild(chip(fmtDur(it.duration), "dur"));
   div.appendChild(chip(fmtSize(it.size), "size"));
-  const idx = state.items.length;
+  // loadMore faz push antes de chamar card(), então o índice deste item é length-1
+  const idx = state.items.length - 1;
   div.addEventListener("click", () => openLightbox(idx));
   grid.appendChild(div);
   return div;
