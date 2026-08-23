@@ -12,6 +12,7 @@
   <input id="q" type="search" placeholder="buscar..." autocomplete="off">
   <select id="sort" title="ordenar por"></select>
   <span id="count"></span>
+  <button type="button" id="gear" title="status do download">&#9881;</button>
   <button type="button" id="logout">sair</button>
 </header>
 
@@ -26,6 +27,19 @@
 <main id="grid"></main>
 <div id="empty" hidden>nada encontrado</div>
 <div id="sentinel"></div>
+
+<div id="dlpanel" hidden>
+  <div class="dlcard">
+    <div class="dlhead"><b>Download dos favoritos</b><button type="button" id="dl-close" title="fechar">&times;</button></div>
+    <div id="dl-body"></div>
+    <div class="dl-actions">
+      <button type="button" id="dl-start" class="primary">Baixar agora</button>
+      <button type="button" id="dl-sync">Sync r&aacute;pido</button>
+      <button type="button" id="dl-stop" disabled>Parar</button>
+    </div>
+    <p id="dl-hint"></p>
+  </div>
+</div>
 
 <div id="lightbox" hidden>
   <div id="lb-content"></div>

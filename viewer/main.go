@@ -46,7 +46,8 @@ type server struct {
 	paths     map[string]string // nome -> caminho completo
 	indexedAt time.Time
 
-	durs *durationStore
+	durs   *durationStore
+	docker *dockerMon
 
 	probeMu    sync.Mutex
 	probeLeft  int // videos na fila de analise de duracao
@@ -84,6 +85,7 @@ func main() {
 		password: env("VIEWER_PASSWORD", "sankvault"),
 		secret:   newSecret(),
 		durs:     newDurationStore(filepath.Join(thumbDir, "meta.json")),
+		docker:   newDockerMon(),
 		busy:     map[string]bool{},
 	}
 
@@ -92,6 +94,9 @@ func main() {
 	mux.HandleFunc("GET /static/{file}", srv.requireAuth(srv.handleStatic))
 	mux.HandleFunc("GET /api/items", srv.requireAuth(srv.handleItems))
 	mux.HandleFunc("GET /api/stats", srv.requireAuth(srv.handleStats))
+	mux.HandleFunc("GET /api/download/status", srv.requireAuth(srv.handleDlStatus))
+	mux.HandleFunc("POST /api/download/start", srv.requireAuth(srv.handleDlStart))
+	mux.HandleFunc("POST /api/download/stop", srv.requireAuth(srv.handleDlStop))
 	mux.HandleFunc("GET /media/{name}", srv.requireAuth(srv.handleMedia))
 	mux.HandleFunc("GET /thumb/{name}", srv.requireAuth(srv.handleThumb))
 	mux.HandleFunc("GET /login", srv.handleLogin)
@@ -274,6 +279,11 @@ func (s *server) handleStats(w http.ResponseWriter, r *http.Request) {
 		"counts": counts,
 		"probe":  map[string]int{"left": left, "total": total},
 	}
+	var totalBytes int64
+	for _, it := range items {
+		totalBytes += it.Size
+	}
+	st["total_bytes"] = totalBytes
 	// versão do índice para o front detectar mudanças entre polls
 	s.mu.Lock()
 	st["indexedAt"] = s.indexedAt.Unix()

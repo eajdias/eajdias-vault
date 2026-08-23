@@ -19,6 +19,8 @@ services:
     restart: "no"
 
   # Web UI local com login: http://127.0.0.1:8090
+  # O socket do Docker permite iniciar/parar o downloader pelo painel da UI
+  # (engrenagem). Remova a linha abaixo para modo somente-leitura.
   viewer:
     build: ./viewer
     ports:
@@ -28,9 +30,13 @@ services:
       MEDIA_DIR: /data/media
       THUMB_DIR: /data/thumbs
       ADDR: ":8080"
+    # roda como root para falar com /var/run/docker.sock (controle do
+    # downloader pela UI). Remova junto com o mount do socket p/ read-only.
+    user: "0:0"
     volumes:
       - vault_media:/data/media:ro
       - vault_thumbs:/data/thumbs
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 
 volumes:

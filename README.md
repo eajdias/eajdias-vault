@@ -59,6 +59,27 @@ Geral porque o navegador não renderiza.
 
 Endpoints: `GET /api/items?category=all|image|gif|video&sort=recent|oldest|size_asc|size_desc|duration_asc|duration_desc|name&q=&offset=&limit=` e `GET /api/stats` (contadores + progresso da análise).
 
+### Painel de download (engrenagem ⚙)
+
+O botão ⚙ no topo abre o painel de status/controle do downloader:
+
+- **Estado ao vivo**: fase (baixando/concluído/interrompido), taxa (MB/s),
+  arquivos e volume baixados na sessão, tamanho total do vault. O downloader
+  publica um heartbeat a cada 3s em `/data/media/.download-status.json`
+  (arquivo oculto — não aparece na galeria).
+- **Botões**: *Baixar agora* (`SYNC_MODE=full`), *Sync rápido*
+  (`SYNC_MODE=incremental`) e *Parar* — equivalem a
+  `docker compose run --rm -e SYNC_MODE=… downloader` e `docker stop`, via
+  Docker API no socket montado no viewer. Se o socket não estiver montado,
+  o painel vira somente-leitura.
+- Iniciando pela UI, o container recebe o label `sank-vault.downloader` e é
+  removido automaticamente ao terminar; runs iniciados pelo terminal também
+  são detectados e podem ser parados pelo painel.
+- Aviso de travamento: sem progresso por >3 min, o estado mostra
+  "⚠ sem progresso".
+
+Endpoints: `GET /api/download/status`, `POST /api/download/start?mode=full|incremental` (409 se já ativo), `POST /api/download/stop`.
+
 ## Variáveis (opcionais — padrões hardcoded)
 
 `SANKAKU_USER`, `SANKAKU_PASS`, `FAV_TAG` (default `zubirous`), `SYNC_MODE`

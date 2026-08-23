@@ -74,8 +74,8 @@ const loginHTML = `<!doctype html>
  .box{background:#171922;padding:2rem 2.5rem;border-radius:14px;width:min(320px,90vw);box-shadow:0 10px 40px rgba(0,0,0,.6)}
  h1{margin:0 0 1rem;font-size:1.3rem;font-weight:600}
  h1 b{color:#7c5cff}
- input{width:100%;box-sizing:border-box;padding:.65rem .8rem;border-radius:8px;border:1px solid #2c2f3d;background:#0e0f13;color:inherit;font-size:1rem}
- button{width:100%;margin-top:.8rem;padding:.65rem;border:0;border-radius:8px;background:#7c5cff;color:#fff;font-size:1rem;cursor:pointer}
+ input{width:100%%;box-sizing:border-box;padding:.65rem .8rem;border-radius:8px;border:1px solid #2c2f3d;background:#0e0f13;color:inherit;font-size:1rem}
+ button{width:100%%;margin-top:.8rem;padding:.65rem;border:0;border-radius:8px;background:#7c5cff;color:#fff;font-size:1rem;cursor:pointer}
  button:hover{filter:brightness(1.15)}
  .erro{color:#ff6b81;font-size:.85rem;margin:.6rem 0 0;text-align:center}
 </style></head>
