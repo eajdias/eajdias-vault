@@ -98,6 +98,31 @@ body {
 
 .sort-box {
   flex: 0 0 auto;
+  display: inline-flex;
+  gap: 6px;
+}
+#randbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  width: 38px;
+  border-radius: 8px;
+  border: 1px solid #282c3c;
+  background: #0a0b0e;
+  color: #cfd1de;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+#randbtn:hover { border-color: #7c5cff; color: #fff; }
+#randbtn.active {
+  background: #7c5cff22;
+  border-color: #7c5cff;
+  color: #b9a8ff;
+}
+#sort[disabled] {
+  opacity: 0.35;
+  cursor: default;
 }
 #sort {
   height: 38px;
@@ -245,6 +270,40 @@ body {
 }
 .card .chip.dur { right: 6px; top: 6px; }
 .card .chip.size { right: 6px; bottom: 6px; opacity: 0.9; }
+
+/* estrela de favorito no card */
+.starbtn {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: #9aa0b5;
+  cursor: pointer;
+  z-index: 3;
+  transition: color .15s ease, transform .1s ease;
+}
+.starbtn:active { transform: scale(0.88); }
+.starbtn.active { color: #ffc83d; }
+.starbtn.active svg { fill: #ffc83d; }
+#lb-fav.active { color: #ffc83d; }
+#lb-fav.active svg { fill: #ffc83d; }
+
+/* zoom da imagem no lightbox */
+#lb-content img {
+  transform-origin: center center;
+  will-change: transform;
+}
+#lb-content img.zoomed { cursor: grab; }
 
 .card.err {
   display: flex;

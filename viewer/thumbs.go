@@ -76,7 +76,11 @@ func (s *server) handleThumb(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// fila global: no máximo 2 gerações simultâneas (ffmpeg/decode pesam CPU
+	// e RAM do host; requisições excedentes ficam enfileiradas no canal)
+	s.sem <- struct{}{}
 	err := s.buildThumb(name, dst, width)
+	<-s.sem
 
 	s.tmu.Lock()
 	delete(s.busy, key)

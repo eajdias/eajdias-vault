@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"embed"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"hash/fnv"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -37,6 +40,7 @@ type Item struct {
 	MIME     string  `json:"mime"`
 	Kind     string  `json:"kind"`               // image | video | other
 	Duration float64 `json:"duration,omitempty"` // segundos (apenas videos)
+	Fav      bool    `json:"fav,omitempty"`
 }
 
 type server struct {
@@ -52,6 +56,9 @@ type server struct {
 
 	durs   *durationStore
 	docker *dockerMon
+	favs   *favStore
+
+	sem chan struct{} // limite de thumbs geradas em paralelo (ffmpeg/decode)
 
 	fmu   sync.Mutex
 	fails map[string]*failRec // rate limit de login por IP
@@ -109,10 +116,12 @@ func main() {
 	srv := &server{
 		mediaDir: mediaDir,
 		thumbDir: thumbDir,
-		password: env("VIEWER_PASSWORD", "sankvault"),
+		password: env("VIEWER_PASSWORD", "Sankvault@123"),
 		secret:   newSecret(filepath.Join(thumbDir, ".session_secret")),
 		durs:     newDurationStore(filepath.Join(thumbDir, "meta.json")),
 		docker:   newDockerMon(),
+		favs:     newFavStore(filepath.Join(thumbDir, "favorites.json")),
+		sem:      make(chan struct{}, 2),
 		busy:     map[string]bool{},
 		fails:    map[string]*failRec{},
 	}
@@ -122,6 +131,7 @@ func main() {
 	mux.HandleFunc("GET /static/{file}", srv.requireAuth(srv.handleStatic))
 	mux.HandleFunc("GET /api/items", srv.requireAuth(srv.handleItems))
 	mux.HandleFunc("GET /api/stats", srv.requireAuth(srv.handleStats))
+	mux.HandleFunc("POST /api/fav/{name}", srv.requireAuth(srv.handleFavToggle))
 	mux.HandleFunc("GET /api/download/status", srv.requireAuth(srv.handleDlStatus))
 	mux.HandleFunc("POST /api/download/start", srv.requireAuth(srv.handleDlStart))
 	mux.HandleFunc("POST /api/download/stop", srv.requireAuth(srv.handleDlStop))
@@ -190,6 +200,7 @@ func (s *server) rescan() ([]Item, map[string]string) {
 				it.Duration = d
 			}
 		}
+		it.Fav = s.favs.has(it.Name)
 		alive[it.Name] = true
 	}
 	s.durs.prune(alive)
@@ -223,7 +234,7 @@ func catOf(it Item) string {
 	}
 }
 
-var validCats = map[string]bool{"all": true, "image": true, "gif": true, "video": true}
+var validCats = map[string]bool{"all": true, "image": true, "gif": true, "video": true, "fav": true}
 
 func applySort(items []Item, key string) {
 	switch key {
@@ -253,6 +264,34 @@ func applySort(items []Item, key string) {
 	}
 }
 
+// applyRandom embaralha de forma DETERMINÍSTICA: a posição de cada mídia
+// depende apenas de (seed, nome). Com o mesmo seed, todas as páginas voltam
+// na mesma ordem => paginação/scroll infinito estável. Seed 0 = aleatório
+// de verdade (o servidor gera um e devolve pro cliente fixar).
+func applyRandom(items []Item, seed uint64) uint64 {
+	if seed == 0 {
+		seed = uint64(time.Now().UnixNano())
+	}
+	type kv struct {
+		it    Item
+		score uint64
+	}
+	buf := make([]kv, len(items))
+	for i, it := range items {
+		h := fnv.New64a()
+		var sb [8]byte
+		binary.BigEndian.PutUint64(sb[:], seed)
+		h.Write(sb[:])
+		io.WriteString(h, it.Name)
+		buf[i] = kv{it, h.Sum64()}
+	}
+	sort.SliceStable(buf, func(i, j int) bool { return buf[i].score < buf[j].score })
+	for i := range buf {
+		items[i] = buf[i].it
+	}
+	return seed
+}
+
 func (s *server) handleItems(w http.ResponseWriter, r *http.Request) {
 	q := strings.ToLower(strings.TrimSpace(r.FormValue("q")))
 	cat := r.FormValue("category")
@@ -260,6 +299,7 @@ func (s *server) handleItems(w http.ResponseWriter, r *http.Request) {
 		cat = "all"
 	}
 	sortKey := r.FormValue("sort")
+	seed, _ := strconv.ParseUint(r.FormValue("seed"), 10, 64)
 	offset, _ := strconv.Atoi(r.FormValue("offset"))
 	limit, _ := strconv.Atoi(r.FormValue("limit"))
 	if limit <= 0 || limit > 200 {
@@ -269,7 +309,10 @@ func (s *server) handleItems(w http.ResponseWriter, r *http.Request) {
 	items, _ := s.rescan()
 	filtered := make([]Item, 0, len(items))
 	for _, it := range items {
-		if cat != "all" && catOf(it) != cat {
+		if cat == "fav" && !it.Fav {
+			continue
+		}
+		if cat != "all" && cat != "fav" && catOf(it) != cat {
 			continue
 		}
 		if q != "" && !strings.Contains(strings.ToLower(it.Name), q) {
@@ -277,7 +320,11 @@ func (s *server) handleItems(w http.ResponseWriter, r *http.Request) {
 		}
 		filtered = append(filtered, it)
 	}
-	applySort(filtered, sortKey)
+	if sortKey == "random" {
+		seed = applyRandom(filtered, seed)
+	} else {
+		applySort(filtered, sortKey)
+	}
 
 	total := len(filtered)
 	if offset > total {
@@ -291,15 +338,22 @@ func (s *server) handleItems(w http.ResponseWriter, r *http.Request) {
 	if page == nil {
 		page = []Item{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"total": total, "items": page})
+	resp := map[string]any{"total": total, "items": page}
+	if sortKey == "random" {
+		resp["seed"] = seed // cliente fixa o seed usado nas próximas páginas
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *server) handleStats(w http.ResponseWriter, r *http.Request) {
 	items, _ := s.rescan()
-	counts := map[string]int{"all": len(items), "image": 0, "gif": 0, "video": 0}
+	counts := map[string]int{"all": len(items), "image": 0, "gif": 0, "video": 0, "fav": 0}
 	for _, it := range items {
 		if c := catOf(it); c != "other" {
 			counts[c]++
+		}
+		if it.Fav {
+			counts["fav"]++
 		}
 	}
 	left, total := s.probeStats()
@@ -317,6 +371,27 @@ func (s *server) handleStats(w http.ResponseWriter, r *http.Request) {
 	st["indexedAt"] = s.indexedAt.Unix()
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, st)
+}
+
+// ---- favoritos --------------------------------------------------------------
+
+// handleFavToggle alterna a estrela de uma mídia (POST /api/fav/{name}).
+func (s *server) handleFavToggle(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, paths := s.rescan(); func() bool { _, ok := paths[name]; return !ok }() {
+		http.NotFound(w, r)
+		return
+	}
+	fav := s.favs.toggle(name)
+	// reflete já no índice em cache (rescan tem TTL de 8s)
+	s.mu.Lock()
+	for i := range s.items {
+		if s.items[i].Name == name {
+			s.items[i].Fav = fav
+		}
+	}
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]bool{"fav": fav})
 }
 
 // ---- servico de midia ------------------------------------------------------

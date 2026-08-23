@@ -26,7 +26,7 @@ services:
     ports:
       - "127.0.0.1:8090:8080"
     environment:
-      VIEWER_PASSWORD: ${VIEWER_PASSWORD:-sankvault}
+      VIEWER_PASSWORD: ${VIEWER_PASSWORD:-Sankvault@123}
       MEDIA_DIR: /data/media
       THUMB_DIR: /data/thumbs
       ADDR: ":8080"
@@ -37,6 +37,23 @@ services:
       - vault_media:/data/media:ro
       - vault_thumbs:/data/thumbs
       - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+  # Sync incremental diario automatico (04:00 por padrao; mude com
+  # AUTOSYNC_HOUR="06:30" no .env). Nao corre junto de um download manual:
+  # detecta o heartbeat do painel e reprograma sozinho.
+  autosync:
+    build: ./downloader
+    # sobrescreve o ENTRYPOINT da imagem (entrypoint.sh baixaria na hora!)
+    entrypoint: ["/app/autosync.sh"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      AUTOSYNC_HOUR: ${AUTOSYNC_HOUR:-04:00}
+    volumes:
+      - vault_media:/data/media
+      - vault_db:/data/db
     restart: unless-stopped
 
 volumes:

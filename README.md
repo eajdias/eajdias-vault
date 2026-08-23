@@ -12,7 +12,7 @@ docker compose run --rm downloader
 
 # 2) abrir a galeria
 docker compose up -d viewer
-# http://127.0.0.1:8090  — senha padrão: sankvault
+# http://127.0.0.1:8090  — senha padrão: Sankvault@123
 ```
 
 ## Como funciona
@@ -39,11 +39,11 @@ ffmpeg como fallback universal (inclui HEIC/AVIF/TIFF quando o build do
 ffmpeg os decodifica). Novos formatos caem em `application/octet-stream`
 e continuam listados/baixáveis.
 
-### Abas e ordenação
+### Abas, ordenação e modo aleatório
 
-A UI tem abas **Geral · Imagens · GIFs · Vídeos** (com contadores) e um seletor
-de ordenação por aba. A duração dos vídeos é extraída com `ffprobe` em
-background (2 por vez) e cacheada em `/data/thumbs/meta.json` — enquanto a
+A UI tem abas **Geral · ★ Favoritos · Imagens · GIFs · Vídeos** (com contadores)
+e um seletor de ordenação por aba. A duração dos vídeos é extraída com `ffprobe`
+em background (2 por vez) e cacheada em `/data/thumbs/meta.json` — enquanto a
 análise roda, vídeos sem duração ficam **sempre no fim** das ordenações por
 duração e um indicador `⏳ analisando vídeos… x/y` aparece nas abas.
 
@@ -53,12 +53,30 @@ duração e um indicador `⏳ analisando vídeos… x/y` aparece nas abas.
 | Imagens / GIFs | tamanho ↑↓, recentes, antigos, nome | **Menores primeiro** (carregam mais rápido) |
 | Vídeos | duração ↑↓, tamanho ↑↓, recentes, nome | **Duração curta → longa** |
 
-Aba/ordem/busca ficam na URL (`?tab=videos&sort=duration_asc&q=x`) para
-sobreviver a refresh e ao botão voltar; a ordem escolhida é lembrada por aba
+**Modo aleatório (🔀)**: ligado por padrão — todas as mídias aparecem em ordem
+embaralhada como apresentação. O embaralhamento usa um **seed determinístico**
+(`?rand=1&seed=N`): a mesma seed reproduz exatamente a mesma ordem em todas as
+páginas, então o scroll infinito continua estável. Clique no 🔀 para desligar e
+voltar às ordenações normais (a preferência fica em `localStorage`).
+
+**Favoritos (★)**: cada card e o lightbox têm uma estrela; favoritos são
+persistidos no servidor (`/data/thumbs/favorites.json`) e aparecem na aba
+**★ Favoritos**. Endpoint: `POST /api/fav/{name}`.
+
+No lightbox: vídeos **reiniciam em loop infinito**, imagens suportam **zoom por
+pinch** (1x–4x) com pan de 1 dedo, duplo toque alterna 1x ↔ 2x ancorado no
+ponto e a roda do mouse também dá zoom — com zoom ativo, o swipe arrasta a
+imagem em vez de navegar.
+
+Thumbs fora da tela (±1500px) têm o `src` liberado para economizar RAM do
+celular e recarregam ao voltar; a geração de thumbs é limitada a 2 simultâneas.
+
+Aba/ordem ficam na URL (`?tab=videos&sort=duration_asc`) para sobreviver a
+refresh e ao botão voltar; a ordem escolhida é lembrada por aba
 (`localStorage`). GIFs têm aba própria (`image/gif`); HEIC/TIFF só aparecem no
 Geral porque o navegador não renderiza.
 
-Endpoints: `GET /api/items?category=all|image|gif|video&sort=recent|oldest|size_asc|size_desc|duration_asc|duration_desc|name&q=&offset=&limit=` e `GET /api/stats` (contadores + progresso da análise).
+Endpoints: `GET /api/items?category=all|fav|image|gif|video&sort=recent|oldest|size_asc|size_desc|duration_asc|duration_desc|name|random&seed=&offset=&limit=` e `GET /api/stats` (contadores + progresso da análise).
 
 ### Painel de download (engrenagem ⚙)
 
@@ -81,12 +99,21 @@ O botão ⚙ no topo abre o painel de status/controle do downloader:
 
 Endpoints: `GET /api/download/status`, `POST /api/download/start?mode=full|incremental` (409 se já ativo), `POST /api/download/stop`.
 
+### Sync automático diário
+
+O serviço `autosync` roda sempre (restart: unless-stopped) e dispara um **sync
+incremental** todo dia às **04:00** (`AUTOSYNC_HOUR` no `.env` para mudar).
+Antes de rodar ele verifica o heartbeat do painel: se já houver um download
+ativo (manual ou pela UI), adia 30 min sozinho. Um lock por `mkdir` em
+`/data/db/.autosync-lock` impede duas instâncias simultâneas. Logs:
+`docker compose logs -f autosync`. Para desativar: `docker compose stop autosync`.
+
 ## Variáveis (opcionais — padrões hardcoded)
 
 `SANKAKU_USER`, `SANKAKU_PASS`, `FAV_TAG` (default `zubirous`), `SYNC_MODE`
 (`full` é o padrão: varre a lista inteira até o fim, pulando o que já está no
 archive; `incremental` para cedo ao achar mídia já baixada — sync rápido),
-`VIEWER_PASSWORD` (default `sankvault`).
+`VIEWER_PASSWORD` (default `Sankvault@123`), `AUTOSYNC_HOUR` (hora do sync automático, default `04:00`).
 
 ## Comandos úteis
 

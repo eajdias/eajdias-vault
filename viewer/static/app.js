@@ -5,16 +5,25 @@ const sentinel = document.getElementById("sentinel");
 const emptyBox = document.getElementById("empty");
 const countEl = document.getElementById("count");
 const sortSel = document.getElementById("sort");
+const randBtn = document.getElementById("randbtn");
 const probeNote = document.getElementById("probenote");
 const lb = document.getElementById("lightbox");
 const lbContent = document.getElementById("lb-content");
 const lbCounter = document.getElementById("lb-counter");
 const lbFilesize = document.getElementById("lb-filesize");
+const lbFavBtn = document.getElementById("lb-fav");
 
 // ---- abas + ordenação ------------------------------------------------------
 
 const SORTS = {
   all: [
+    ["recent", "Recentes"],
+    ["oldest", "Antigos"],
+    ["size_desc", "Maiores arquivos"],
+    ["size_asc", "Menores arquivos"],
+    ["name", "Nome A-Z"],
+  ],
+  fav: [
     ["recent", "Recentes"],
     ["oldest", "Antigos"],
     ["size_desc", "Maiores arquivos"],
@@ -44,12 +53,15 @@ const SORTS = {
     ["name", "Nome A-Z"],
   ],
 };
-const DEFAULT_SORT = { all: "recent", image: "size_asc", gif: "size_asc", video: "duration_asc" };
+const DEFAULT_SORT = { all: "recent", fav: "recent", image: "size_asc", gif: "size_asc", video: "duration_asc" };
 
 function sortFor(tab) {
   const saved = localStorage.getItem(`sv-sort-${tab}`);
   return SORTS[tab].some(([k]) => k === saved) ? saved : DEFAULT_SORT[tab];
 }
+
+// ---- modo aleatório (apresentação padrão; toggle desliga) -------------------
+// seed determinístico => paginação estável entre páginas/scroll infinito.
 
 function renderSortOptions() {
   sortSel.replaceChildren();
@@ -60,12 +72,33 @@ function renderSortOptions() {
     if (k === state.sort) o.selected = true;
     sortSel.appendChild(o);
   }
+  sortSel.disabled = state.random;
+}
+
+function applyRandomUI() {
+  randBtn.classList.toggle("active", state.random);
+  randBtn.setAttribute("aria-pressed", String(state.random));
+  sortSel.disabled = state.random;
+}
+
+function setRandom(on) {
+  state.random = on;
+  localStorage.setItem("sv-random", on ? "1" : "0");
+  state.seed = null; // novo sorteio
+  applyRandomUI();
+  syncUrl();
+  reset();
 }
 
 function syncUrl() {
   const p = new URLSearchParams();
   if (state.tab !== "all") p.set("tab", state.tab);
-  if (state.sort !== DEFAULT_SORT[state.tab]) p.set("sort", state.sort);
+  if (state.random) {
+    p.set("rand", "1");
+    if (state.seed) p.set("seed", state.seed);
+  } else if (state.sort !== DEFAULT_SORT[state.tab]) {
+    p.set("sort", state.sort);
+  }
   history.replaceState(null, "", p.size ? `?${p}` : location.pathname);
 }
 
@@ -81,7 +114,11 @@ function setTab(tab) {
 
 // ---- estado / fetch --------------------------------------------------------
 
-const state = { offset: 0, total: null, tab: "all", sort: "recent", loading: false, items: [] };
+const state = {
+  offset: 0, total: null, tab: "all", sort: "recent", loading: false, items: [],
+  random: localStorage.getItem("sv-random") !== "0", // ON por padrão
+  seed: null,
+};
 let abortCtl = null;
 
 async function api(url, signal) {
@@ -170,8 +207,16 @@ function card(it) {
   if (it.kind === "video") div.appendChild(chip("▶", "play"));
   if (it.duration > 0) div.appendChild(chip(fmtDur(it.duration), "dur"));
   div.appendChild(chip(fmtSize(it.size), "size"));
+  const sb = document.createElement("button");
+  sb.type = "button";
+  sb.className = "starbtn" + (it.fav ? " active" : "");
+  sb.title = "Favorito";
+  sb.setAttribute("aria-label", "Favoritar");
+  sb.innerHTML = STAR_SVG;
   // loadMore faz push antes de chamar card(), então o índice deste item é length-1
   const idx = state.items.length - 1;
+  sb.addEventListener("click", (e) => { e.stopPropagation(); toggleFav(it, idx, sb); });
+  div.appendChild(sb);
   div.addEventListener("click", () => openLightbox(idx));
   if (canHover && (it.kind === "video" || it.kind === "gif")) {
     let hov = null;
@@ -184,8 +229,53 @@ function card(it) {
     });
   }
   grid.appendChild(div);
+  thumbUnload.observe(div);
   return div;
 }
+
+// ---- favoritos --------------------------------------------------------------
+
+const STAR_SVG = `<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`;
+
+async function toggleFav(it, idx, btn) {
+  try {
+    const r = await fetch(`/api/fav/${encodeURIComponent(it.name)}`, { method: "POST" });
+    if (!r.ok) return;
+    const d = await r.json();
+    it.fav = d.fav;
+    if (btn) btn.classList.toggle("active", d.fav);
+    // estrela do lightbox acompanha quando é o mesmo item
+    if (lbIdx === idx) lbFavBtn.classList.toggle("active", d.fav);
+    refreshStats();
+    // na aba Favoritos, remover a estrela tira o item da lista
+    if (state.tab === "fav" && !d.fav) reset();
+  } catch { /* silencioso */ }
+}
+
+lbFavBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const it = state.items[lbIdx];
+  if (!it) return;
+  const cardBtn = grid.children[lbIdx]?.querySelector(".starbtn");
+  toggleFav(it, lbIdx, cardBtn);
+});
+
+// ---- descarte de thumbs fora da tela ----------------------------------------
+// Com 3000+ mídias o DOM acumula muitos <img>; soltar o src de cards distantes
+// libera os bitmaps da RAM do celular. O aspect-ratio já foi fixado no load,
+// então não há layout shift ao esvaziar/restaurar.
+const thumbUnload = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    const im = e.target.querySelector("img");
+    if (!im || e.target.classList.contains("err")) continue;
+    if (e.isIntersecting) {
+      if (im.dataset.full) { im.src = im.dataset.full; delete im.dataset.full; }
+    } else if (im.src && !im.dataset.full && !e.target.querySelector("video.preview")) {
+      im.dataset.full = im.src;
+      im.removeAttribute("src");
+    }
+  }
+}, { rootMargin: "1500px" });
 
 async function loadMore() {
   if (state.loading) return;
@@ -196,9 +286,14 @@ async function loadMore() {
     abortCtl = new AbortController();
     const p = new URLSearchParams({
       offset: state.offset, limit: 60,
-      category: state.tab, sort: state.sort,
+      category: state.tab, sort: state.random ? "random" : state.sort,
     });
+    if (state.random && state.seed) p.set("seed", state.seed);
     const d = await api(`/api/items?${p}`, abortCtl.signal);
+    if (state.random && d.seed) {
+      state.seed = d.seed; // fixa o seed sorteado pelo servidor
+      syncUrl();
+    }
     for (const it of d.items) {
       state.items.push(it);
       card(it);
@@ -260,6 +355,9 @@ function closeLightbox() {
   stopBoost(lbContent.querySelector("video") || undefined);
   lb.hidden = true;
   lbContent.innerHTML = "";
+  zimg = null;
+  ptrs.clear(); pinch = null; lastPan = null;
+  resetZoom();
   unlockScroll();
 }
 function renderLightbox() {
@@ -271,10 +369,13 @@ function renderLightbox() {
   lbFilesize.textContent = fmtSize(it.size || 0);
   lbContent.innerHTML = "";
   const src = `/media/${encodeURIComponent(it.name)}`;
+  zimg = null;
+  resetZoom();
   let el;
   if (it.kind === "video") {
     el = document.createElement("video");
     el.controls = true; el.autoplay = true; el.playsInline = true; el.src = src;
+    el.loop = true; // reprodução em loop infinito por padrão
     el.controlsList = "nodownload";
     el.disablePictureInPicture = true;
     el.setAttribute("disableremoteplayback", "");
@@ -285,13 +386,128 @@ function renderLightbox() {
     el.src = src; el.alt = it.name;
     el.draggable = false;
     el.setAttribute("selectstart", "return false");
+    zimg = el;
   } else {
     el = document.createElement("p");
     el.className = "unsupported";
     el.textContent = `${it.name} — ${it.mime} (sem exibição no navegador)`;
   }
   lbContent.appendChild(el);
+  lbFavBtn.classList.toggle("active", !!it.fav);
 }
+
+// ---- zoom de imagens no lightbox --------------------------------------------
+// Pinch com 2 dedos (1x–4x) + pan arrastando quando ampliado; duplo toque /
+// duplo clique alterna 1x <-> 2x ancorado no ponto tocado; roda do mouse
+// também dá zoom. Com zoom > 1x, swipe não navega (arrasta a imagem).
+const zoom = { scale: 1, x: 0, y: 0 };
+let zimg = null;
+
+function applyZoom() {
+  if (!zimg) return;
+  zimg.style.transform = `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`;
+  zimg.classList.toggle("zoomed", zoom.scale > 1);
+}
+function resetZoom() {
+  zoom.scale = 1; zoom.x = 0; zoom.y = 0;
+  applyZoom();
+}
+// mantém o ponto da tela fixo enquanto muda a escala
+function zoomAtPoint(px, py, newScale) {
+  if (!zimg) return;
+  newScale = Math.min(4, Math.max(1, newScale));
+  const cx = innerWidth / 2, cy = innerHeight / 2;
+  const rx = (px - cx - zoom.x) / zoom.scale;
+  const ry = (py - cy - zoom.y) / zoom.scale;
+  zoom.x = (px - cx) - newScale * rx;
+  zoom.y = (py - cy) - newScale * ry;
+  zoom.scale = newScale;
+  if (newScale === 1) { zoom.x = 0; zoom.y = 0; }
+  applyZoom();
+}
+
+const ptrs = new Map(); // pointerId -> {x,y}
+let pinch = null;       // estado do gesto ativo
+function pinchDist() {
+  const [a, b] = [...ptrs.values()];
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+function pinchCenter() {
+  const [a, b] = [...ptrs.values()];
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+lbContent.addEventListener("pointerdown", (e) => {
+  if (!(e.target instanceof HTMLImageElement)) return;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  // base do pan: o próximo move calcula o delta a partir daqui
+  if (ptrs.size === 1 && zoom.scale > 1) lastPan = { x: e.clientX, y: e.clientY };
+  try { e.target.setPointerCapture(e.pointerId); } catch { /* pointer sintético/teste */ }
+  if (ptrs.size === 2 && zimg) {
+    pinch = { dist: pinchDist(), scale: zoom.scale, c: pinchCenter(), zx: zoom.x, zy: zoom.y };
+  }
+});
+lbContent.addEventListener("pointermove", (e) => {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (!zimg) return;
+  if (pinch && ptrs.size >= 2) {
+    const f = pinchDist() / pinch.dist;
+    const ns = Math.min(4, Math.max(1, pinch.scale * f));
+    const c = pinchCenter();
+    // escala ancorada no centro inicial do gesto + segue o movimento dos dedos
+    zoomAtPoint(pinch.c.x, pinch.c.y, ns);
+    zoom.x += c.x - pinch.c.x;
+    zoom.y += c.y - pinch.c.y;
+    if (ns === 1) { zoom.x = 0; zoom.y = 0; }
+    applyZoom();
+  } else if (ptrs.size === 1 && zoom.scale > 1) {
+    const prev = lastPan || { x: e.clientX, y: e.clientY };
+    zoom.x += e.clientX - prev.x;
+    zoom.y += e.clientY - prev.y;
+    applyZoom();
+    lastPan = { x: e.clientX, y: e.clientY };
+  }
+});
+let lastPan = null;
+function ptrEnd(e) {
+  ptrs.delete(e.pointerId);
+  if (ptrs.size === 1) {
+    const [p] = [...ptrs.values()]; // dedo restante do pinch vira pan contínuo
+    lastPan = { x: p.x, y: p.y };
+  } else {
+    lastPan = null;
+  }
+  if (ptrs.size < 2) pinch = null;
+}
+lbContent.addEventListener("pointerup", ptrEnd);
+lbContent.addEventListener("pointercancel", ptrEnd);
+
+// duplo toque/clique na IMAGEM alterna 1x <-> 2x no ponto; um único tap
+// alterna a barra superior/navs (modo imersivo) — tudo num listener só
+// para a ordem duplo-tap vs toggle ficar determinística
+let lastTapT = 0;
+lbContent.addEventListener("click", (e) => {
+  if (lbSuppressTap) { lbSuppressTap = false; return; }
+  const isImg = e.target instanceof HTMLImageElement;
+  const t = e.target;
+  if (t !== lbContent && !isImg && !(t instanceof HTMLVideoElement)) return;
+  const now = Date.now();
+  if (isImg && now - lastTapT < 300) {
+    lastTapT = 0;
+    if (zoom.scale > 1) resetZoom();
+    else zoomAtPoint(e.clientX, e.clientY, 2);
+    return; // duplo toque não alterna a barra
+  }
+  lastTapT = isImg ? now : 0;
+  lb.classList.toggle("chrome-hidden");
+});
+lbContent.addEventListener("wheel", (e) => {
+  if (!(e.target instanceof HTMLImageElement)) return;
+  e.preventDefault();
+  const f = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  zoomAtPoint(e.clientX, e.clientY, zoom.scale * f);
+}, { passive: false });
 document.getElementById("lb-close").addEventListener("click", closeLightbox);
 lb.addEventListener("click", (e) => { if (e.target === lb) closeLightbox(); });
 document.getElementById("lb-prev").addEventListener("click", () => { if (lbIdx > 0) { lbIdx--; renderLightbox(); } });
@@ -325,18 +541,14 @@ lb.addEventListener("touchstart", (e) => {
 }, { passive: true });
 lb.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
 lb.addEventListener("touchend", (e) => {
+  if (zoom.scale > 1) { // imagem ampliada: gesto é pan/zoom, não navegação
+    tX = e.changedTouches[0].clientX; tY = e.changedTouches[0].clientY;
+    return;
+  }
   const t = e.changedTouches[0];
   lbSwipe(t.clientX - tX, t.clientY - tY);
 }, { passive: true });
 
-// tap na mídia alterna barra superior/navs (modo imersivo; cliques nos
-// controles nativos do vídeo não propagam para o elemento)
-lbContent.addEventListener("click", (e) => {
-  if (lbSuppressTap) { lbSuppressTap = false; return; }
-  const t = e.target;
-  if (t !== lbContent && !(t instanceof HTMLImageElement) && !(t instanceof HTMLVideoElement)) return;
-  lb.classList.toggle("chrome-hidden");
-});
 // long-press não deve abrir menu de contexto (salvar imagem/vídeo)
 lbContent.addEventListener("contextmenu", (e) => {
   if (e.target instanceof HTMLVideoElement || e.target instanceof HTMLImageElement) e.preventDefault();
@@ -363,6 +575,7 @@ sortSel.addEventListener("change", () => {
   syncUrl();
   reset();
 });
+randBtn.addEventListener("click", () => setRandom(!state.random));
 
 // ---- badges das abas + progresso da análise de duração ----
 async function refreshStats() {
@@ -480,7 +693,7 @@ new IntersectionObserver((entries) => {
   if (entries.some((e) => e.isIntersecting)) loadMore();
 }, { rootMargin: "600px" }).observe(sentinel);
 
-// ---- boot: restaura aba/sort/busca da URL ----
+// ---- boot: restaura aba/sort/modo aleatório da URL ----
 {
   const p = new URLSearchParams(location.search);
   const tab = SORTS[p.get("tab")] ? p.get("tab") : "all";
@@ -490,8 +703,16 @@ new IntersectionObserver((entries) => {
     state.sort = p.get("sort");
     localStorage.setItem(`sv-sort-${tab}`, state.sort);
   }
+  // modo aleatório: ?rand=1 força ON, rand=0 força OFF; sem parâmetro,
+  // segue a preferência salva (padrão ON). Seed restaura a mesma ordem.
+  const rp = p.get("rand");
+  if (rp === "1") state.random = true;
+  else if (rp === "0") state.random = false;
+  const sp = p.get("seed");
+  if (state.random && sp) state.seed = Number(sp) || null;
   document.querySelectorAll(".tab").forEach((b) => { b.classList.toggle("active", b.dataset.cat === tab); });
   renderSortOptions();
+  applyRandomUI();
 }
 reset();
 refreshStats();
