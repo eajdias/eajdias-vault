@@ -456,6 +456,42 @@ body {
   pointer-events: none;
 }
 
+/* Gestos touch: nenhum scroll do fundo enquanto o lightbox/painel está aberto */
+#lightbox,
+#dlpanel { touch-action: none; }
+
+/* Indicador de velocidade 2x (segurar sobre o vídeo) */
+#lb-speed {
+  position: absolute;
+  left: 50%;
+  bottom: max(28px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 1015;
+  background: #7c5cff;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 6px 16px;
+  border-radius: 999px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+  pointer-events: none;
+}
+#lb-speed[hidden] { display: none; }
+
+/* Preview no hover (desktop): vídeo/GIF animando dentro do card */
+.card video.preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.card video.preview.on { opacity: 1; }
+
 /* ==========================================================================
    PAINEL DO DOWNLOADER (MODAL)
    ========================================================================== */

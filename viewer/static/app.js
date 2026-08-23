@@ -112,6 +112,47 @@ function chip(text, cls) {
   return c;
 }
 
+// ---- preview no hover (só desktop): vídeo toca trecho mudo, GIF anima ----
+// leve por construção: 1 preview ativo por vez, atraso de 350ms e vídeos
+// via streaming Range (não baixa o arquivo inteiro); GIF limitado a 48MB
+const canHover = matchMedia("(hover: hover) and (pointer: fine)").matches;
+let activePreview = null;
+
+function stopPreview() {
+  if (!activePreview) return;
+  const { div, kind } = activePreview;
+  activePreview = null;
+  const vid = div.querySelector("video.preview");
+  if (vid) { vid.pause(); vid.removeAttribute("src"); vid.load(); vid.remove(); }
+  const im = div.querySelector("img");
+  if (kind === "gif" && im && div.dataset.thumbSrc) im.src = div.dataset.thumbSrc;
+}
+
+function startPreview(div, it) {
+  stopPreview();
+  if (!div.isConnected) return;
+  const src = `/media/${encodeURIComponent(it.name)}`;
+  if (it.kind === "gif") {
+    if (it.size > 48 * 1024 * 1024) return;
+    const im = div.querySelector("img");
+    if (!im) return;
+    div.dataset.thumbSrc = im.src;
+    activePreview = { div, kind: "gif" };
+    im.src = src; // gif real substitui o thumb estático e anima
+  } else if (it.kind === "video") {
+    const v = document.createElement("video");
+    v.className = "preview";
+    v.muted = true; v.loop = true; v.playsInline = true; v.preload = "metadata";
+    v.src = src;
+    v.addEventListener("loadeddata", () => {
+      v.classList.add("on");
+      v.play().catch(() => {});
+    }, { once: true });
+    activePreview = { div, kind: "video" };
+    div.appendChild(v);
+  }
+}
+
 function card(it) {
   const div = document.createElement("div");
   div.className = "card";
@@ -133,6 +174,16 @@ function card(it) {
   // loadMore faz push antes de chamar card(), então o índice deste item é length-1
   const idx = state.items.length - 1;
   div.addEventListener("click", () => openLightbox(idx));
+  if (canHover && (it.kind === "video" || it.kind === "gif")) {
+    let hov = null;
+    div.addEventListener("mouseenter", () => {
+      hov = setTimeout(() => { hov = null; startPreview(div, it); }, 350);
+    });
+    div.addEventListener("mouseleave", () => {
+      if (hov) { clearTimeout(hov); hov = null; }
+      stopPreview();
+    });
+  }
   grid.appendChild(div);
   return div;
 }
@@ -174,14 +225,41 @@ function reset() {
 
 // ---- lightbox ----
 let lbIdx = -1;
+let lbSuppressTap = false; // um hold de 2x não deve alternar a barra
+const lbSpeedEl = document.getElementById("lb-speed");
+let holdTimer = null;
+
+function stopBoost(v) {
+  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  if (v && v.playbackRate !== 1) v.playbackRate = 1;
+  lbSpeedEl.hidden = true;
+}
+
+// segurar pressionado sobre o vídeo = 2x; soltar = volta ao normal
+function wireVideoGestures(v) {
+  v.addEventListener("pointerdown", () => {
+    holdTimer = setTimeout(() => {
+      holdTimer = null;
+      if (!v.isConnected || v.ended) return;
+      v.playbackRate = 2;
+      lbSpeedEl.hidden = false;
+      lbSuppressTap = true;
+    }, 450);
+  });
+  for (const ev of ["pointerup", "pointercancel", "pointerleave"]) {
+    v.addEventListener(ev, () => stopBoost(v));
+  }
+}
 
 function openLightbox(i) {
+  stopPreview();
   lbIdx = i;
   renderLightbox();
   lb.hidden = false;
   lockScroll();
 }
 function closeLightbox() {
+  stopBoost(lbContent.querySelector("video") || undefined);
   lb.hidden = true;
   lbContent.innerHTML = "";
   unlockScroll();
@@ -189,6 +267,7 @@ function closeLightbox() {
 function renderLightbox() {
   const it = state.items[lbIdx];
   if (!it) return closeLightbox();
+  stopBoost();
   lb.classList.remove("chrome-hidden");
   lbCounter.textContent = `${lbIdx + 1} / ${state.total ?? state.items.length}`;
   lbFilesize.textContent = fmtSize(it.size || 0);
@@ -198,6 +277,7 @@ function renderLightbox() {
   if (it.kind === "video") {
     el = document.createElement("video");
     el.controls = true; el.autoplay = true; el.playsInline = true; el.src = src;
+    wireVideoGestures(el);
   } else if (it.kind === "image") {
     el = document.createElement("img");
     el.src = src; el.alt = it.name;
@@ -222,33 +302,54 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight" && lbIdx < state.items.length - 1) { lbIdx++; renderLightbox(); }
 });
 
-// swipe horizontal no lightbox (mobile)
+// swipe no lightbox (mobile): horizontal E vertical navegam entre mídias;
+// touch-action:none + preventDefault garantem que o fundo não role junto
+function lbSwipe(dx, dy) {
+  if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    if (dx < 0 && lbIdx < state.items.length - 1) { lbIdx++; renderLightbox(); }
+    else if (dx > 0 && lbIdx > 0) { lbIdx--; renderLightbox(); }
+    return;
+  }
+  if (Math.abs(dy) > 48 && Math.abs(dy) > Math.abs(dx) * 1.5) {
+    if (dy < 0 && lbIdx < state.items.length - 1) { lbIdx++; renderLightbox(); }
+    else if (dy > 0 && lbIdx > 0) { lbIdx--; renderLightbox(); }
+  }
+}
 let tX = 0, tY = 0;
 lb.addEventListener("touchstart", (e) => {
   const t = e.changedTouches[0];
   tX = t.clientX; tY = t.clientY;
 }, { passive: true });
+lb.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
 lb.addEventListener("touchend", (e) => {
   const t = e.changedTouches[0];
-  const dx = t.clientX - tX, dy = t.clientY - tY;
-  if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-    if (dx < 0 && lbIdx < state.items.length - 1) { lbIdx++; renderLightbox(); }
-    else if (dx > 0 && lbIdx > 0) { lbIdx--; renderLightbox(); }
-  }
+  lbSwipe(t.clientX - tX, t.clientY - tY);
 }, { passive: true });
 
 // tap na mídia alterna barra superior/navs (modo imersivo; cliques nos
 // controles nativos do vídeo não propagam para o elemento)
 lbContent.addEventListener("click", (e) => {
+  if (lbSuppressTap) { lbSuppressTap = false; return; }
   const t = e.target;
   if (t !== lbContent && !(t instanceof HTMLImageElement) && !(t instanceof HTMLVideoElement)) return;
   lb.classList.toggle("chrome-hidden");
 });
+// long-press não deve abrir menu de contexto (salvar imagem/vídeo)
+lbContent.addEventListener("contextmenu", (e) => {
+  if (e.target instanceof HTMLVideoElement || e.target instanceof HTMLImageElement) e.preventDefault();
+});
 
-// trava o scroll do fundo com overlays abertos
-function lockScroll() { document.body.style.overflow = "hidden"; }
+// trava o scroll do fundo com overlays abertos (html E body: alguns
+// browsers móveis rolam pelo documentElement mesmo com body overflow hidden)
+function lockScroll() {
+  document.body.style.overflow = "hidden";
+  document.documentElement.style.overflow = "hidden";
+}
 function unlockScroll() {
-  if (lb.hidden && dlpanel.hidden) document.body.style.overflow = "";
+  if (lb.hidden && dlpanel.hidden) {
+    document.body.style.overflow = "";
+    document.documentElement.style.overflow = "";
+  }
 }
 
 // ---- busca com debounce ----
