@@ -8,6 +8,8 @@ const sortSel = document.getElementById("sort");
 const probeNote = document.getElementById("probenote");
 const lb = document.getElementById("lightbox");
 const lbContent = document.getElementById("lb-content");
+const lbCounter = document.getElementById("lb-counter");
+const lbFilesize = document.getElementById("lb-filesize");
 
 // ---- abas + ordenação ------------------------------------------------------
 
@@ -116,7 +118,11 @@ function card(it) {
   const im = new Image();
   im.loading = "lazy";
   im.decoding = "async";
-  im.addEventListener("load", () => im.classList.add("on"));
+  im.addEventListener("load", () => {
+    im.classList.add("on");
+    if (im.naturalWidth && im.naturalHeight)
+      div.style.aspectRatio = im.naturalWidth + "/" + im.naturalHeight;
+  });
   im.addEventListener("error", () => div.classList.add("err"));
   im.src = `/thumb/${encodeURIComponent(it.name)}?w=400`;
   im.alt = it.name;
@@ -173,20 +179,25 @@ function openLightbox(i) {
   lbIdx = i;
   renderLightbox();
   lb.hidden = false;
+  lockScroll();
 }
 function closeLightbox() {
   lb.hidden = true;
   lbContent.innerHTML = "";
+  unlockScroll();
 }
 function renderLightbox() {
   const it = state.items[lbIdx];
   if (!it) return closeLightbox();
+  lb.classList.remove("chrome-hidden");
+  lbCounter.textContent = `${lbIdx + 1} / ${state.total ?? state.items.length}`;
+  lbFilesize.textContent = fmtSize(it.size || 0);
   lbContent.innerHTML = "";
   const src = `/media/${encodeURIComponent(it.name)}`;
   let el;
   if (it.kind === "video") {
     el = document.createElement("video");
-    el.controls = true; el.autoplay = true; el.src = src;
+    el.controls = true; el.autoplay = true; el.playsInline = true; el.src = src;
   } else if (it.kind === "image") {
     el = document.createElement("img");
     el.src = src; el.alt = it.name;
@@ -210,6 +221,35 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowLeft" && lbIdx > 0) { lbIdx--; renderLightbox(); }
   if (e.key === "ArrowRight" && lbIdx < state.items.length - 1) { lbIdx++; renderLightbox(); }
 });
+
+// swipe horizontal no lightbox (mobile)
+let tX = 0, tY = 0;
+lb.addEventListener("touchstart", (e) => {
+  const t = e.changedTouches[0];
+  tX = t.clientX; tY = t.clientY;
+}, { passive: true });
+lb.addEventListener("touchend", (e) => {
+  const t = e.changedTouches[0];
+  const dx = t.clientX - tX, dy = t.clientY - tY;
+  if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    if (dx < 0 && lbIdx < state.items.length - 1) { lbIdx++; renderLightbox(); }
+    else if (dx > 0 && lbIdx > 0) { lbIdx--; renderLightbox(); }
+  }
+}, { passive: true });
+
+// tap na mídia alterna barra superior/navs (modo imersivo; cliques nos
+// controles nativos do vídeo não propagam para o elemento)
+lbContent.addEventListener("click", (e) => {
+  const t = e.target;
+  if (t !== lbContent && !(t instanceof HTMLImageElement) && !(t instanceof HTMLVideoElement)) return;
+  lb.classList.toggle("chrome-hidden");
+});
+
+// trava o scroll do fundo com overlays abertos
+function lockScroll() { document.body.style.overflow = "hidden"; }
+function unlockScroll() {
+  if (lb.hidden && dlpanel.hidden) document.body.style.overflow = "";
+}
 
 // ---- busca com debounce ----
 let deb;
@@ -328,11 +368,13 @@ btnStop.addEventListener("click", () => dlAction("/api/download/stop"));
 
 function openDl() {
   dlpanel.hidden = false;
+  lockScroll();
   refreshDl();
   dlTimer = setInterval(refreshDl, 3000);
 }
 function closeDl() {
   dlpanel.hidden = true;
+  unlockScroll();
   clearInterval(dlTimer);
   dlTimer = null;
 }
@@ -363,3 +405,12 @@ new IntersectionObserver((entries) => {
 reset();
 refreshStats();
 setInterval(refreshStats, 15000);
+
+// altura do header vira var CSS (as abas sticky se posicionam por ela;
+// no mobile o header quebra em 2 linhas e a altura muda)
+function syncHeadVar() {
+  document.documentElement.style.setProperty(
+    "--headH", document.querySelector("header").offsetHeight + "px");
+}
+syncHeadVar();
+addEventListener("resize", syncHeadVar);
