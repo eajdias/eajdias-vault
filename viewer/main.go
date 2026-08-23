@@ -322,6 +322,9 @@ func (s *server) handleRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
+	// nunca cachear: mudanças no front precisam valer em reload simples,
+	// inclusive no celular (cache do Chromium foi a origem de bugs "fantasma")
+	w.Header().Set("Cache-Control", "no-store")
 	switch r.PathValue("file") {
 	case "app.js":
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")

@@ -277,19 +277,22 @@ function renderLightbox() {
   if (it.kind === "video") {
     el = document.createElement("video");
     el.controls = true; el.autoplay = true; el.playsInline = true; el.src = src;
+    el.controlsList = "nodownload";
+    el.disablePictureInPicture = true;
+    el.setAttribute("disableremoteplayback", "");
+    el.draggable = false;
     wireVideoGestures(el);
   } else if (it.kind === "image") {
     el = document.createElement("img");
     el.src = src; el.alt = it.name;
+    el.draggable = false;
+    el.setAttribute("selectstart", "return false");
   } else {
     el = document.createElement("p");
     el.className = "unsupported";
     el.textContent = `${it.name} — ${it.mime} (sem exibição no navegador)`;
   }
   lbContent.appendChild(el);
-  const dl = document.getElementById("lb-download");
-  dl.href = src;
-  dl.setAttribute("download", it.name);
 }
 document.getElementById("lb-close").addEventListener("click", closeLightbox);
 lb.addEventListener("click", (e) => { if (e.target === lb) closeLightbox(); });
@@ -305,12 +308,14 @@ document.addEventListener("keydown", (e) => {
 // swipe no lightbox (mobile): horizontal E vertical navegam entre mídias;
 // touch-action:none + preventDefault garantem que o fundo não role junto
 function lbSwipe(dx, dy) {
-  if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  const MIN = 40; // dedo real curva: limiar um pouco mais permissivo
+  if (adx > MIN && ady < adx * 0.9) {
     if (dx < 0 && lbIdx < state.items.length - 1) { lbIdx++; renderLightbox(); }
     else if (dx > 0 && lbIdx > 0) { lbIdx--; renderLightbox(); }
     return;
   }
-  if (Math.abs(dy) > 48 && Math.abs(dy) > Math.abs(dx) * 1.5) {
+  if (ady > MIN && adx < ady * 0.9) {
     if (dy < 0 && lbIdx < state.items.length - 1) { lbIdx++; renderLightbox(); }
     else if (dy > 0 && lbIdx > 0) { lbIdx--; renderLightbox(); }
   }

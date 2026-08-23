@@ -33,7 +33,8 @@ docker compose up -d viewer
 | Vídeo exibível | MP4/M4V, WebM, MKV (`video/x-matroska`) |
 | Só download* | HEIC/HEIF, TIFF, AVI, WMV/ASF, FLV, Ogg |
 
-\* o lightbox mostra o tipo e um botão **baixar**; thumbnails são gerados por
+\* o lightbox mostra o tipo e a mensagem "sem exibição no navegador" (visualização
+remota apenas — não há botão de download na interface); thumbnails são gerados por
 ffmpeg como fallback universal (inclui HEIC/AVIF/TIFF quando o build do
 ffmpeg os decodifica). Novos formatos caem em `application/octet-stream`
 e continuam listados/baixáveis.

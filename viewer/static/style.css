@@ -404,6 +404,10 @@ body {
   object-fit: contain;
   display: block;
   border-radius: 0;
+  /* Android/iOS: sem menu nativo de long-press, seleção ou arraste */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 #lb-content .unsupported {
@@ -458,7 +462,8 @@ body {
 
 /* Gestos touch: nenhum scroll do fundo enquanto o lightbox/painel está aberto */
 #lightbox,
-#dlpanel { touch-action: none; }
+#dlpanel { touch-action: none; overscroll-behavior: contain; }
+html, body { overscroll-behavior: none; }
 
 /* Indicador de velocidade 2x (segurar sobre o vídeo) */
 #lb-speed {
