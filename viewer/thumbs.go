@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -140,12 +141,17 @@ func (s *server) buildThumb(name, dst string, width int) error {
 
 	// 2) fallback universal: ffmpeg extrai frame de mp4/mkv/webm/avi/wmv/flv/
 	//    gif animado/heic/avif/tiff/etc. (-f mjpeg: saida tmp nao tem extensao util)
+	//    timeout de 30s por tentativa: arquivo corrompido/exotico nao pode
+	//    travar a fila global (cap 2) para sempre
 	for _, ss := range []string{"1", "0"} {
-		cmd := exec.Command("ffmpeg", "-nostdin", "-y", "-v", "error",
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		cmd := exec.CommandContext(ctx, "ffmpeg", "-nostdin", "-y", "-v", "error",
 			"-ss", ss, "-i", path, "-frames:v", "1",
 			"-vf", fmt.Sprintf("scale=%d:-2:force_original_aspect_ratio=decrease", width),
 			"-q:v", "4", "-f", "mjpeg", tmp)
-		if cmd.Run() == nil {
+		err := cmd.Run()
+		cancel()
+		if err == nil {
 			if fi, err := os.Stat(tmp); err == nil && fi.Size() > 0 {
 				return os.Rename(tmp, dst)
 			}
