@@ -66,7 +66,6 @@ function syncUrl() {
   const p = new URLSearchParams();
   if (state.tab !== "all") p.set("tab", state.tab);
   if (state.sort !== DEFAULT_SORT[state.tab]) p.set("sort", state.sort);
-  if (state.q) p.set("q", state.q);
   history.replaceState(null, "", p.size ? `?${p}` : location.pathname);
 }
 
@@ -82,7 +81,7 @@ function setTab(tab) {
 
 // ---- estado / fetch --------------------------------------------------------
 
-const state = { offset: 0, total: null, q: "", tab: "all", sort: "recent", loading: false, items: [] };
+const state = { offset: 0, total: null, tab: "all", sort: "recent", loading: false, items: [] };
 let abortCtl = null;
 
 async function api(url, signal) {
@@ -199,7 +198,6 @@ async function loadMore() {
       offset: state.offset, limit: 60,
       category: state.tab, sort: state.sort,
     });
-    if (state.q) p.set("q", state.q);
     const d = await api(`/api/items?${p}`, abortCtl.signal);
     for (const it of d.items) {
       state.items.push(it);
@@ -357,17 +355,6 @@ function unlockScroll() {
   }
 }
 
-// ---- busca com debounce ----
-let deb;
-document.getElementById("q").addEventListener("input", (e) => {
-  clearTimeout(deb);
-  deb = setTimeout(() => {
-    state.q = e.target.value.trim();
-    syncUrl();
-    reset();
-  }, 300);
-});
-
 // ---- controles de aba/ordem ----
 document.querySelectorAll(".tab").forEach((b) => { b.addEventListener("click", () => setTab(b.dataset.cat)); });
 sortSel.addEventListener("change", () => {
@@ -503,8 +490,6 @@ new IntersectionObserver((entries) => {
     state.sort = p.get("sort");
     localStorage.setItem(`sv-sort-${tab}`, state.sort);
   }
-  const q0 = p.get("q") || "";
-  if (q0) { document.getElementById("q").value = q0; state.q = q0; }
   document.querySelectorAll(".tab").forEach((b) => { b.classList.toggle("active", b.dataset.cat === tab); });
   renderSortOptions();
 }
