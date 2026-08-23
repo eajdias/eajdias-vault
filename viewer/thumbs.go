@@ -97,7 +97,8 @@ func (s *server) handleThumb(w http.ResponseWriter, r *http.Request) {
 
 func writeThumb(w http.ResponseWriter, data []byte) {
 	w.Header().Set("Content-Type", "image/jpeg")
-	w.Header().Set("Cache-Control", "public, max-age=31536000")
+	// nome da midia e unico (id_md5) => conteudo da thumb nunca muda
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	w.Write(data)
 }
 

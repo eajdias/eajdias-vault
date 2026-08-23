@@ -94,7 +94,7 @@ func main() {
 		mediaDir: mediaDir,
 		thumbDir: thumbDir,
 		password: env("VIEWER_PASSWORD", "sankvault"),
-		secret:   newSecret(),
+		secret:   newSecret(filepath.Join(thumbDir, ".session_secret")),
 		durs:     newDurationStore(filepath.Join(thumbDir, "meta.json")),
 		docker:   newDockerMon(),
 		busy:     map[string]bool{},
@@ -126,7 +126,7 @@ func main() {
 // rescan devolve o indice de midias, reescaneando o volume se o cache estiver velho.
 func (s *server) rescan() ([]Item, map[string]string) {
 	s.mu.Lock()
-	if s.items != nil && time.Since(s.indexedAt) < 3*time.Second {
+	if s.items != nil && time.Since(s.indexedAt) < 8*time.Second {
 		items, paths := s.items, s.paths
 		s.mu.Unlock()
 		return items, paths
@@ -322,6 +322,9 @@ func (s *server) handleMedia(w http.ResponseWriter, r *http.Request) {
 	mime := sniffMime(f)
 
 	w.Header().Set("Content-Type", mime)
+	// id_md5 e unico e imutavel: o browser pode guardar para sempre
+	// (reabrir um video do lightbox nao re-transfere nada)
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	w.Header().Set("Content-Disposition", "inline; filename*=UTF-8''"+url.PathEscape(name))
 	// ServeContent cuida de Range/206/If-Range -> seeking funciona nos videos.
 	http.ServeContent(w, r, "", fi.ModTime(), f)

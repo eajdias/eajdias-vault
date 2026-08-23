@@ -15,15 +15,21 @@ import (
 
 const cookieName = "sv_session"
 
-func newSecret() []byte {
+func newSecret(persistPath string) []byte {
 	// opcional: SESSION_SECRET em hex mantem sessoes validas entre restarts
 	if hexSec := os.Getenv("SESSION_SECRET"); len(hexSec) >= 32 {
 		if b, err := hex.DecodeString(hexSec); err == nil && len(b) >= 16 {
 			return b
 		}
 	}
+	// segredo persistido no volume: o login sobrevive a restarts do viewer
+	// (importante no uso remoto via tailscale, onde re-logar custa mais)
+	if b, err := os.ReadFile(persistPath); err == nil && len(b) >= 32 {
+		return b
+	}
 	b := make([]byte, 32)
 	rand.Read(b)
+	_ = os.WriteFile(persistPath, b, 0o600)
 	return b
 }
 
