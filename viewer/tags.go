@@ -22,9 +22,10 @@ func normTag(s string) string {
 }
 
 type tagStore struct {
-	mu   sync.Mutex
-	path string
-	data map[string]*tagEntry
+	mu    sync.Mutex
+	path  string
+	data  map[string]*tagEntry
+	dirty bool
 }
 
 func newTagStore(path string) *tagStore {
@@ -55,6 +56,9 @@ func (t *tagStore) ingest(name string, tags []string) {
 	defer t.mu.Unlock()
 	e, ok := t.data[name]
 	if !ok {
+		if len(tags) == 0 {
+			return // sem sidecar ainda: tenta de novo no próximo rescan
+		}
 		e = &tagEntry{}
 		t.data[name] = e
 	}
@@ -69,6 +73,7 @@ func (t *tagStore) ingest(name string, tags []string) {
 		}
 		seen[tg] = true
 		e.Tags = append(e.Tags, tg)
+		t.dirty = true
 	}
 }
 
@@ -157,13 +162,31 @@ func (t *tagStore) editCustom(name string, add, del []string) *tagEntry {
 	return cp
 }
 
-// prune remove entradas de mídias que não existem mais.
-func (t *tagStore) prune(alive map[string]bool) {
+// saveIfDirty persiste só quando houve mudança desde o último save.
+func (t *tagStore) saveIfDirty() {
+	t.mu.Lock()
+	if !t.dirty {
+		t.mu.Unlock()
+		return
+	}
+	t.dirty = false
+	t.mu.Unlock()
+	t.save()
+}
+
+// prune remove entradas de mídias que não existem mais; devolve se mudou algo.
+func (t *tagStore) prune(alive map[string]bool) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	rm := false
 	for k := range t.data {
 		if !alive[k] {
 			delete(t.data, k)
+			rm = true
 		}
 	}
+	if rm {
+		t.dirty = true
+	}
+	return rm
 }

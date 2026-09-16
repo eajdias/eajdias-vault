@@ -60,6 +60,7 @@ type server struct {
 	docker *dockerMon
 	favs   *favStore
 	tags   *tagStore
+	fcache *fileCache
 
 	sem chan struct{} // limite de thumbs geradas em paralelo (ffmpeg/decode)
 
@@ -125,6 +126,7 @@ func main() {
 		docker:   newDockerMon(),
 		favs:     newFavStore(filepath.Join(thumbDir, "favorites.json")),
 		tags:     newTagStore(filepath.Join(thumbDir, "tags.json")),
+		fcache:   newFileCache(filepath.Join(thumbDir, "filecache.json")),
 		sem:      make(chan struct{}, 2),
 		busy:     map[string]bool{},
 		fails:    map[string]*failRec{},
@@ -180,16 +182,21 @@ func (s *server) rescan() ([]Item, map[string]string) {
 		if err != nil {
 			return nil
 		}
-		f, err := os.Open(path)
-		if err != nil {
-			return nil
+		size, mtime := info.Size(), info.ModTime().Unix()
+		mime, ok := s.fcache.lookup(name, size, mtime)
+		if !ok {
+			f, err := os.Open(path)
+			if err != nil {
+				return nil
+			}
+			mime = sniffMime(f)
+			f.Close()
+			s.fcache.store(name, mime, size, mtime)
 		}
-		mime := sniffMime(f)
-		f.Close()
 		items = append(items, Item{
 			Name:    name,
-			Size:    info.Size(),
-			ModTime: info.ModTime().Unix(),
+			Size:    size,
+			ModTime: mtime,
 			MIME:    mime,
 			Kind:    kindOf(mime),
 		})
@@ -231,9 +238,13 @@ func (s *server) rescan() ([]Item, map[string]string) {
 		}
 		alive[it.Name] = true
 	}
-	s.durs.prune(alive)
+	if s.durs.prune(alive) > 0 {
+		s.durs.save()
+	}
 	s.tags.prune(alive)
-	s.tags.save()
+	s.fcache.prune(alive)
+	s.tags.saveIfDirty()
+	s.fcache.saveIfDirty()
 
 	sort.Slice(items, func(i, j int) bool { return items[i].ModTime > items[j].ModTime })
 
@@ -298,10 +309,10 @@ func applySort(items []Item, key string) {
 	case "duration_asc", "duration_desc":
 		asc := key == "duration_asc"
 		sort.SliceStable(items, func(i, j int) bool {
-		a, b := items[i].Duration > 0, items[j].Duration > 0
-		if a != b { // sem duração conhecida vai sempre pro fim
-			return a
-		}
+			a, b := items[i].Duration > 0, items[j].Duration > 0
+			if a != b { // sem duração conhecida vai sempre pro fim
+				return a
+			}
 			if asc {
 				return a && items[i].Duration < items[j].Duration
 			}
