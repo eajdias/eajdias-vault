@@ -298,10 +298,10 @@ func applySort(items []Item, key string) {
 	case "duration_asc", "duration_desc":
 		asc := key == "duration_asc"
 		sort.SliceStable(items, func(i, j int) bool {
-			a, b := items[i].Duration > 0, items[j].Duration > 0
-			if a != b { // sem duração conhecida vai sempre pro fim
-				return b
-			}
+		a, b := items[i].Duration > 0, items[j].Duration > 0
+		if a != b { // sem duração conhecida vai sempre pro fim
+			return a
+		}
 			if asc {
 				return a && items[i].Duration < items[j].Duration
 			}
