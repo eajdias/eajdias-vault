@@ -52,6 +52,30 @@ func TestTagStoreFreq(t *testing.T) {
 	}
 }
 
+func TestTagStoreCustomAddDel(t *testing.T) {
+	ts := newTagStore(filepath.Join(t.TempDir(), "tags.json"))
+	ts.ingest("1_a", []string{"1girl"})
+	got := ts.editCustom("1_a", []string{"Minha Tag", "1girl"}, nil)
+	if len(got.Custom) != 2 {
+		t.Fatalf("add deve unir sem duplicar: %+v", got.Custom)
+	}
+	got = ts.editCustom("1_a", nil, []string{"minha_tag", "fantasma"})
+	if len(got.Custom) != 1 || got.Custom[0] != "1girl" {
+		t.Fatalf("del falhou: %+v", got.Custom)
+	}
+}
+
+func TestTagStoreTitle(t *testing.T) {
+	ts := newTagStore(filepath.Join(t.TempDir(), "tags.json"))
+	ts.ingest("1_a", []string{"1girl"})
+	if got := ts.setTitle("1_a", "  Meu Nome  "); got.Title != "  Meu Nome  " {
+		t.Fatalf("title deve guardar verbatim: %q", got.Title)
+	}
+	if got := ts.setTitle("1_a", ""); got.Title != "" {
+		t.Fatalf("title vazio deve limpar: %q", got.Title)
+	}
+}
+
 func TestTagStoreSaveLoad(t *testing.T) {
 	dir := t.TempDir()
 	ts := newTagStore(filepath.Join(dir, "tags.json"))

@@ -120,6 +120,61 @@ func (t *tagStore) save() {
 	_ = os.Rename(tmp, t.path)
 }
 
+// editCustom adiciona/remove customs (normalizados, sem duplicatas),
+// cria a entrada se ausente, persiste e devolve cópia do estado final.
+func (t *tagStore) editCustom(name string, add, del []string) *tagEntry {
+	t.mu.Lock()
+	e, ok := t.data[name]
+	if !ok {
+		e = &tagEntry{}
+		t.data[name] = e
+	}
+	drop := map[string]bool{}
+	for _, tg := range del {
+		if tg = normTag(tg); tg != "" {
+			drop[tg] = true
+		}
+	}
+	kept := e.Custom[:0]
+	seen := map[string]bool{}
+	for _, tg := range e.Custom {
+		if !drop[tg] && !seen[tg] {
+			seen[tg] = true
+			kept = append(kept, tg)
+		}
+	}
+	for _, tg := range add {
+		if tg = normTag(tg); tg != "" && !seen[tg] {
+			seen[tg] = true
+			kept = append(kept, tg)
+		}
+	}
+	e.Custom = kept
+	cp := &tagEntry{Title: e.Title}
+	cp.Tags = append([]string{}, e.Tags...)
+	cp.Custom = append([]string{}, e.Custom...)
+	t.mu.Unlock()
+	t.save()
+	return cp
+}
+
+// setTitle define (verbatim, com espaços do usuário) ou limpa o título.
+func (t *tagStore) setTitle(name, title string) *tagEntry {
+	t.mu.Lock()
+	e, ok := t.data[name]
+	if !ok {
+		e = &tagEntry{}
+		t.data[name] = e
+	}
+	e.Title = title
+	cp := &tagEntry{Title: e.Title}
+	cp.Tags = append([]string{}, e.Tags...)
+	cp.Custom = append([]string{}, e.Custom...)
+	t.mu.Unlock()
+	t.save()
+	return cp
+}
+
 // prune remove entradas de mídias que não existem mais.
 func (t *tagStore) prune(alive map[string]bool) {
 	t.mu.Lock()

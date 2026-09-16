@@ -138,6 +138,8 @@ func main() {
 	mux.HandleFunc("GET /api/stats", srv.requireAuth(srv.handleStats))
 	mux.HandleFunc("GET /api/tags", srv.requireAuth(srv.handleTags))
 	mux.HandleFunc("POST /api/fav/{name}", srv.requireAuth(srv.handleFavToggle))
+	mux.HandleFunc("POST /api/ctag/{name}", srv.requireAuth(srv.handleCTag))
+	mux.HandleFunc("POST /api/title/{name}", srv.requireAuth(srv.handleTitle))
 	mux.HandleFunc("GET /api/download/status", srv.requireAuth(srv.handleDlStatus))
 	mux.HandleFunc("POST /api/download/start", srv.requireAuth(srv.handleDlStart))
 	mux.HandleFunc("POST /api/download/stop", srv.requireAuth(srv.handleDlStop))
@@ -482,6 +484,51 @@ func (s *server) handleFavToggle(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]bool{"fav": fav})
+}
+
+// handleCTag edita customs: body {"add":[],"del":[]}. 404 se mídia inexistente.
+func (s *server) handleCTag(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, paths := s.rescan(); func() bool { _, ok := paths[name]; return !ok }() {
+		http.NotFound(w, r)
+		return
+	}
+	var body struct {
+		Add []string `json:"add"`
+		Del []string `json:"del"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	e := s.tags.editCustom(name, body.Add, body.Del)
+	s.mu.Lock()
+	for i := range s.items {
+		if s.items[i].Name == name {
+			s.items[i].Custom = e.Custom
+		}
+	}
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, e)
+}
+
+// handleTitle define/limpa o título: body {"title":"..."}. 404 se inexistente.
+func (s *server) handleTitle(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, paths := s.rescan(); func() bool { _, ok := paths[name]; return !ok }() {
+		http.NotFound(w, r)
+		return
+	}
+	var body struct {
+		Title string `json:"title"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	e := s.tags.setTitle(name, body.Title)
+	s.mu.Lock()
+	for i := range s.items {
+		if s.items[i].Name == name {
+			s.items[i].Title = e.Title
+		}
+	}
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, e)
 }
 
 // ---- servico de midia ------------------------------------------------------
