@@ -298,20 +298,6 @@ function card(it) {
   if (it.kind === "video") div.appendChild(chip("▶", "play"));
   if (it.duration > 0) div.appendChild(chip(fmtDur(it.duration), "dur"));
   div.appendChild(chip(fmtSize(it.size), "size"));
-  if ((it.custom?.length || it.tags?.length)) {
-    const row = document.createElement("div");
-    row.className = "ttags";
-    for (const t of [...(it.custom || []), ...(it.tags || [])].slice(0, 3)) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "ttag";
-      b.textContent = t;
-      b.title = t;
-      b.addEventListener("click", (e) => { e.stopPropagation(); addTag(t); });
-      row.appendChild(b);
-    }
-    div.appendChild(row);
-  }
   const sb = document.createElement("button");
   sb.type = "button";
   sb.className = "starbtn" + (it.fav ? " active" : "");
@@ -504,18 +490,29 @@ function renderLightbox() {
   renderLbTags();
 }
 
-// ---- tags no lightbox: lista (click filtra), customs (× remove), título ----
+// ---- tags no lightbox: atrás de toggle, customs com × para remover --------
 const lbTags = document.getElementById("lb-tags");
-const lbTitle = document.getElementById("lb-title");
+const lbTagsToggle = document.getElementById("lb-tags-toggle");
 const lbTagList = document.getElementById("lb-taglist");
 const lbCustom = document.getElementById("lb-custom");
-const lbTitleInput = document.getElementById("lb-title-input");
+let lbTagsOpen = localStorage.getItem("sv-show-tags") === "1";
+
+function syncTagsToggle(n) {
+  lbTagsToggle.textContent = `🏷 tags (${n ?? 0})`;
+  lbTagsToggle.setAttribute("aria-expanded", String(lbTagsOpen));
+  lbTagList.hidden = !lbTagsOpen;
+}
+lbTagsToggle.addEventListener("click", () => {
+  lbTagsOpen = !lbTagsOpen;
+  localStorage.setItem("sv-show-tags", lbTagsOpen ? "1" : "0");
+  syncTagsToggle((state.items[lbIdx]?.tags?.length || 0) + (state.items[lbIdx]?.custom?.length || 0));
+});
 
 function renderLbTags() {
   const it = state.items[lbIdx];
   if (!it) { lbTags.hidden = true; return; }
   lbTags.hidden = false;
-  lbTitle.textContent = it.title || it.name;
+  syncTagsToggle((it.tags || []).length + (it.custom || []).length);
   lbTagList.replaceChildren();
   for (const t of it.tags || []) {
     const b = document.createElement("button");
@@ -549,7 +546,6 @@ function renderLbTags() {
     s.appendChild(x);
     lbTagList.appendChild(s);
   }
-  if (document.activeElement !== lbTitleInput) lbTitleInput.value = it.title || "";
 }
 
 lbCustom.addEventListener("keydown", async (e) => {
@@ -568,23 +564,6 @@ lbCustom.addEventListener("keydown", async (e) => {
   it.custom = d.custom || [];
   lbCustom.value = "";
   renderLbTags();
-});
-
-lbTitleInput.addEventListener("keydown", async (e) => {
-  if (e.key !== "Enter") return;
-  e.preventDefault();
-  const it = state.items[lbIdx];
-  if (!it) return;
-  const r = await fetch(`/api/title/${encodeURIComponent(it.name)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title: lbTitleInput.value }),
-  });
-  if (!r.ok) return;
-  const d = await r.json();
-  it.title = d.title || "";
-  renderLbTags();
-  lbTitleInput.blur();
 });
 
 // ---- zoom de imagens no lightbox --------------------------------------------

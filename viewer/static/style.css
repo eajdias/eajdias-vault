@@ -225,21 +225,7 @@ body {
 }
 #suggest li button:hover { background: #7c5cff2b; color: #fff; }
 
-/* tags nos cards (topo, clicáveis filtram) */
-.card .ttags {
-  position: absolute;
-  top: 6px;
-  left: 42px;
-  right: 42px;
-  display: flex;
-  gap: 4px;
-  justify-content: center;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 2;
-}
 .ttag {
-  pointer-events: auto;
   font-size: 0.62rem;
   font-weight: 600;
   padding: 2px 7px;
@@ -286,6 +272,7 @@ body {
   max-height: 76px;
   overflow-y: auto;
 }
+#lb-taglist[hidden] { display: none; }
 #lb-taglist .ttag { font-size: 0.72rem; padding: 3px 9px; }
 .tcustom {
   display: inline-flex;
@@ -309,8 +296,26 @@ body {
   line-height: 1;
   padding: 0 2px;
 }
-#lb-tagedit { display: flex; gap: 6px; }
-#lb-tagedit input {
+#lb-tagbar { display: flex; gap: 6px; }
+#lb-tags-toggle {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #2c2f3d;
+  background: rgba(10, 11, 14, 0.9);
+  color: #cdbcff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#lb-tags-toggle[aria-expanded="true"] {
+  border-color: #7c5cff;
+  background: #7c5cff33;
+  color: #fff;
+}
+#lb-custom {
   flex: 1;
   min-width: 0;
   height: 34px;
@@ -322,7 +327,7 @@ body {
   font-size: 0.8rem;
   outline: none;
 }
-#lb-tagedit input:focus { border-color: #7c5cff; }
+#lb-custom:focus { border-color: #7c5cff; }
 
 /* ==========================================================================
    TABS BAR

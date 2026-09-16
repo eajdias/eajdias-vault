@@ -91,8 +91,6 @@ de `favorites.json`/`meta.json`).
 - **Autocomplete**: `GET /api/tags?prefix=&limit=20` (top por frequência).
 - **Tags personalizadas**: no lightbox, `POST /api/ctag/{name}` com
   `{"add":[],"del":[]}`. Sobrevivem à re-ingestão (fonte e customs separados).
-- **Nome da mídia**: no lightbox, `POST /api/title/{name}` com
-  `{"title":"..."}` (vazio limpa e volta a exibir `id_md5`).
 
 ```bash
 # backfill de tags p/ acervo baixado antes dos sidecars (idempotente,
