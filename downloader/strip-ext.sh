@@ -4,6 +4,7 @@
 for f in "$@"; do
 	[ -f "$f" ] || continue
 	case "$f" in
+	*.json) continue ;;
 	*.*) mv -f -- "$f" "${f%.*}" ;;
 	esac
 done
