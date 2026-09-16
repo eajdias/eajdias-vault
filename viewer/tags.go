@@ -9,12 +9,11 @@ import (
 )
 
 // tagEntry é o registro de uma mídia no índice de tags.
-// Tags vem da fonte (Sankaku, via sidecar); Custom/Title são do usuário
-// e nunca são sobrescritos pela ingestão.
+// Tags vem da fonte (Sankaku, via sidecar); Custom é do usuário
+// e nunca é sobrescrito pela ingestão.
 type tagEntry struct {
 	Tags   []string `json:"tags"`
 	Custom []string `json:"custom,omitempty"`
-	Title  string   `json:"title,omitempty"`
 }
 
 // normTag é a normalização canônica: minúsculo, espaços→"_", trim.
@@ -50,7 +49,7 @@ func newTagStore(path string) *tagStore {
 }
 
 // ingest cria a entrada se ausente e mescla tags da fonte (deduplicadas,
-// normalizadas). Custom/Title existentes são preservados.
+// normalizadas). Customs existentes são preservados.
 func (t *tagStore) ingest(name string, tags []string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -81,7 +80,7 @@ func (t *tagStore) get(name string) *tagEntry {
 	if !ok {
 		return nil
 	}
-	cp := &tagEntry{Title: e.Title}
+	cp := &tagEntry{}
 	cp.Tags = append([]string{}, e.Tags...)
 	cp.Custom = append([]string{}, e.Custom...)
 	return cp
@@ -150,24 +149,7 @@ func (t *tagStore) editCustom(name string, add, del []string) *tagEntry {
 		}
 	}
 	e.Custom = kept
-	cp := &tagEntry{Title: e.Title}
-	cp.Tags = append([]string{}, e.Tags...)
-	cp.Custom = append([]string{}, e.Custom...)
-	t.mu.Unlock()
-	t.save()
-	return cp
-}
-
-// setTitle define (verbatim, com espaços do usuário) ou limpa o título.
-func (t *tagStore) setTitle(name, title string) *tagEntry {
-	t.mu.Lock()
-	e, ok := t.data[name]
-	if !ok {
-		e = &tagEntry{}
-		t.data[name] = e
-	}
-	e.Title = title
-	cp := &tagEntry{Title: e.Title}
+	cp := &tagEntry{}
 	cp.Tags = append([]string{}, e.Tags...)
 	cp.Custom = append([]string{}, e.Custom...)
 	t.mu.Unlock()

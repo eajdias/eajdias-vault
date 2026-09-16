@@ -23,14 +23,10 @@ func TestTagStoreIngestPreservesCustom(t *testing.T) {
 	ts := newTagStore(filepath.Join(t.TempDir(), "tags.json"))
 	ts.ingest("1_abc", []string{"1girl", "Long Hair"})
 	ts.data["1_abc"].Custom = []string{"minha_tag"}
-	ts.data["1_abc"].Title = "Meu nome"
 	ts.ingest("1_abc", []string{"1girl", "long_hair", "new_tag"})
 	e := ts.data["1_abc"]
 	if len(e.Custom) != 1 || e.Custom[0] != "minha_tag" {
 		t.Fatalf("custom perdido: %+v", e)
-	}
-	if e.Title != "Meu nome" {
-		t.Fatalf("title perdido: %+v", e)
 	}
 	found := map[string]bool{}
 	for _, tg := range e.Tags {
@@ -65,26 +61,15 @@ func TestTagStoreCustomAddDel(t *testing.T) {
 	}
 }
 
-func TestTagStoreTitle(t *testing.T) {
-	ts := newTagStore(filepath.Join(t.TempDir(), "tags.json"))
-	ts.ingest("1_a", []string{"1girl"})
-	if got := ts.setTitle("1_a", "  Meu Nome  "); got.Title != "  Meu Nome  " {
-		t.Fatalf("title deve guardar verbatim: %q", got.Title)
-	}
-	if got := ts.setTitle("1_a", ""); got.Title != "" {
-		t.Fatalf("title vazio deve limpar: %q", got.Title)
-	}
-}
-
 func TestTagStoreSaveLoad(t *testing.T) {
 	dir := t.TempDir()
 	ts := newTagStore(filepath.Join(dir, "tags.json"))
 	ts.ingest("1_a", []string{"1girl"})
-	ts.data["1_a"].Title = "X"
+	ts.editCustom("1_a", []string{"minha"}, nil)
 	ts.save()
 	ts2 := newTagStore(filepath.Join(dir, "tags.json"))
 	e := ts2.get("1_a")
-	if e == nil || e.Title != "X" || len(e.Tags) != 1 || e.Tags[0] != "1girl" {
+	if e == nil || len(e.Tags) != 1 || e.Tags[0] != "1girl" || len(e.Custom) != 1 || e.Custom[0] != "minha" {
 		t.Fatalf("reload falhou: %+v", e)
 	}
 }
