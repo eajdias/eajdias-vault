@@ -136,6 +136,7 @@ func main() {
 	mux.HandleFunc("GET /static/{file}", srv.requireAuth(srv.handleStatic))
 	mux.HandleFunc("GET /api/items", srv.requireAuth(srv.handleItems))
 	mux.HandleFunc("GET /api/stats", srv.requireAuth(srv.handleStats))
+	mux.HandleFunc("GET /api/tags", srv.requireAuth(srv.handleTags))
 	mux.HandleFunc("POST /api/fav/{name}", srv.requireAuth(srv.handleFavToggle))
 	mux.HandleFunc("GET /api/download/status", srv.requireAuth(srv.handleDlStatus))
 	mux.HandleFunc("POST /api/download/start", srv.requireAuth(srv.handleDlStart))
@@ -263,6 +264,27 @@ func catOf(it Item) string {
 	}
 }
 
+// matchTags: AND sobre a união de Tags+Custom, tudo normalizado.
+// want vazio casa com tudo.
+func matchTags(it Item, want []string) bool {
+	if len(want) == 0 {
+		return true
+	}
+	have := make(map[string]bool, len(it.Tags)+len(it.Custom))
+	for _, tg := range it.Tags {
+		have[normTag(tg)] = true
+	}
+	for _, tg := range it.Custom {
+		have[normTag(tg)] = true
+	}
+	for _, w := range want {
+		if !have[normTag(w)] {
+			return false
+		}
+	}
+	return true
+}
+
 var validCats = map[string]bool{"all": true, "image": true, "gif": true, "video": true, "fav": true}
 
 func applySort(items []Item, key string) {
@@ -322,13 +344,18 @@ func applyRandom(items []Item, seed uint64) uint64 {
 }
 
 func (s *server) handleItems(w http.ResponseWriter, r *http.Request) {
-	q := strings.ToLower(strings.TrimSpace(r.FormValue("q")))
+	var wantTags []string
+	for _, tg := range strings.Split(r.FormValue("tags"), ",") {
+		if tg = normTag(tg); tg != "" {
+			wantTags = append(wantTags, tg)
+		}
+	}
+	seed, _ := strconv.ParseUint(r.FormValue("seed"), 10, 64)
 	cat := r.FormValue("category")
 	if !validCats[cat] {
 		cat = "all"
 	}
 	sortKey := r.FormValue("sort")
-	seed, _ := strconv.ParseUint(r.FormValue("seed"), 10, 64)
 	offset, _ := strconv.Atoi(r.FormValue("offset"))
 	limit, _ := strconv.Atoi(r.FormValue("limit"))
 	if limit <= 0 || limit > 200 {
@@ -344,7 +371,7 @@ func (s *server) handleItems(w http.ResponseWriter, r *http.Request) {
 		if cat != "all" && cat != "fav" && catOf(it) != cat {
 			continue
 		}
-		if q != "" && !strings.Contains(strings.ToLower(it.Name), q) {
+		if !matchTags(it, wantTags) {
 			continue
 		}
 		filtered = append(filtered, it)
@@ -400,6 +427,40 @@ func (s *server) handleStats(w http.ResponseWriter, r *http.Request) {
 	st["indexedAt"] = s.indexedAt.Unix()
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, st)
+}
+
+// handleTags serve autocomplete: prefixo sobre tags conhecidas (fonte+custom),
+// ordenado por frequência desc (empate: alfabético).
+func (s *server) handleTags(w http.ResponseWriter, r *http.Request) {
+	prefix := normTag(r.FormValue("prefix"))
+	limit, _ := strconv.Atoi(r.FormValue("limit"))
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	type tc struct {
+		Tag   string `json:"tag"`
+		Count int    `json:"count"`
+	}
+	out := []tc{}
+	for tg, c := range s.tags.freq() {
+		if prefix != "" && !strings.HasPrefix(tg, prefix) {
+			continue
+		}
+		out = append(out, tc{tg, c})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Tag < out[j].Tag
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	if out == nil {
+		out = []tc{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tags": out})
 }
 
 // ---- favoritos --------------------------------------------------------------
