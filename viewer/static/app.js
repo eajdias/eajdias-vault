@@ -499,7 +499,7 @@ const lbCustom = document.getElementById("lb-custom");
 let lbTagsOpen = localStorage.getItem("sv-show-tags") === "1";
 
 function syncTagsToggle(n) {
-  lbTagsToggle.textContent = `🏷 tags (${n ?? 0})`;
+  lbTagsToggle.textContent = `🏷 ${n ?? 0}`;
   lbTagsToggle.setAttribute("aria-expanded", String(lbTagsOpen));
   lbTagEnv.hidden = !lbTagsOpen;
 }

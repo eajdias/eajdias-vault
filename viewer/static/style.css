@@ -241,7 +241,7 @@ body {
 }
 .ttag:hover { border-color: #7c5cff; color: #fff; }
 
-/* painel de tags no lightbox */
+/* painel de tags no lightbox (só aparece com o toggle da topbar) */
 #lb-tags {
   position: absolute;
   left: 0;
@@ -252,19 +252,12 @@ body {
   flex-direction: column;
   gap: 8px;
   padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, rgba(0,0,0,0.92) 30%, rgba(0,0,0,0) 100%);
+  background: none;
+  pointer-events: none;
   transition: opacity 0.25s ease;
 }
 #lb-tags[hidden] { display: none; }
-#lightbox.chrome-hidden #lb-tags { opacity: 0; pointer-events: none; }
-#lb-title {
-  color: #e6e6ea;
-  font-weight: 600;
-  font-size: 0.88rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+#lightbox.chrome-hidden #lb-tags { opacity: 0; }
 #lb-taglist {
   display: flex;
   flex-wrap: wrap;
@@ -299,25 +292,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  pointer-events: auto;
+  background: rgba(10, 11, 14, 0.94);
+  border: 1px solid #2c2f3d;
+  border-radius: 12px;
+  padding: 10px;
 }
 #lb-tagenv[hidden] { display: none; }
-#lb-tags-toggle {
-  width: 100%;
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 1px solid #2c2f3d;
-  background: rgba(10, 11, 14, 0.9);
-  color: #cdbcff;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  text-align: left;
-}
 #lb-tags-toggle[aria-expanded="true"] {
+  background: #7c5cff;
   border-color: #7c5cff;
-  background: #7c5cff33;
   color: #fff;
 }
 #lb-custom {
