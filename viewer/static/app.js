@@ -12,6 +12,10 @@ const lbContent = document.getElementById("lb-content");
 const lbCounter = document.getElementById("lb-counter");
 const lbFilesize = document.getElementById("lb-filesize");
 const lbFavBtn = document.getElementById("lb-fav");
+const tagInput = document.getElementById("taginput");
+const chipsBox = document.getElementById("chips");
+const suggestBox = document.getElementById("suggest");
+const tagbarEl = document.getElementById("tagbar");
 
 // ---- abas + ordenação ------------------------------------------------------
 
@@ -93,6 +97,7 @@ function setRandom(on) {
 function syncUrl() {
   const p = new URLSearchParams();
   if (state.tab !== "all") p.set("tab", state.tab);
+  if (state.tags.length) p.set("tags", state.tags.join(","));
   if (state.random) {
     p.set("rand", "1");
     if (state.seed) p.set("seed", state.seed);
@@ -116,6 +121,7 @@ function setTab(tab) {
 
 const state = {
   offset: 0, total: null, tab: "all", sort: "recent", loading: false, items: [],
+  tags: [],
   random: localStorage.getItem("sv-random") !== "0", // ON por padrão
   seed: null,
 };
@@ -147,6 +153,91 @@ function chip(text, cls) {
   c.textContent = text;
   return c;
 }
+
+// ---- filtro por tags (pesquisa = filtro AND) ----------------------------------
+// Normalização espelha o servidor (normTag): minúsculo, espaços→"_".
+function normTagUI(s) {
+  return s.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function renderChips() {
+  chipsBox.replaceChildren();
+  for (const t of state.tags) {
+    const c = document.createElement("span");
+    c.className = "tchip";
+    c.textContent = t;
+    const x = document.createElement("button");
+    x.type = "button";
+    x.textContent = "×";
+    x.setAttribute("aria-label", `Remover ${t}`);
+    x.addEventListener("click", () => removeTag(t));
+    c.appendChild(x);
+    chipsBox.appendChild(c);
+  }
+}
+
+function addTag(t) {
+  t = normTagUI(t);
+  if (!t || state.tags.includes(t)) return;
+  state.tags.push(t);
+  renderChips();
+  syncUrl();
+  reset();
+}
+
+function removeTag(t) {
+  state.tags = state.tags.filter((x) => x !== t);
+  renderChips();
+  syncUrl();
+  reset();
+}
+
+let sugTimer = null;
+tagInput.addEventListener("input", () => {
+  clearTimeout(sugTimer);
+  const v = tagInput.value.trim();
+  if (!v) { suggestBox.hidden = true; return; }
+  sugTimer = setTimeout(async () => {
+    try {
+      const d = await api(`/api/tags?prefix=${encodeURIComponent(v)}&limit=8`);
+      suggestBox.replaceChildren();
+      if (!d.tags.length) { suggestBox.hidden = true; return; }
+      for (const { tag, count } of d.tags) {
+        const li = document.createElement("li");
+        const b = document.createElement("button");
+        b.type = "button";
+        b.dataset.tag = tag;
+        b.textContent = `${tag} (${count})`;
+        b.addEventListener("click", () => {
+          addTag(tag);
+          tagInput.value = "";
+          suggestBox.hidden = true;
+          tagInput.focus();
+        });
+        li.appendChild(b);
+        suggestBox.appendChild(li);
+      }
+      suggestBox.hidden = false;
+    } catch { suggestBox.hidden = true; }
+  }, 150);
+});
+tagInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const first = suggestBox.querySelector("li button");
+    const v = tagInput.value.trim();
+    if (!v && first) addTag(first.dataset.tag);
+    else if (v) addTag(v);
+    tagInput.value = "";
+    suggestBox.hidden = true;
+  } else if (e.key === "Escape") {
+    suggestBox.hidden = true;
+    tagInput.blur();
+  }
+});
+document.addEventListener("click", (e) => {
+  if (!tagbarEl.contains(e.target)) suggestBox.hidden = true;
+});
 
 // ---- preview no hover (só desktop): vídeo toca trecho mudo, GIF anima ----
 // leve por construção: 1 preview ativo por vez, atraso de 350ms e vídeos
@@ -207,6 +298,20 @@ function card(it) {
   if (it.kind === "video") div.appendChild(chip("▶", "play"));
   if (it.duration > 0) div.appendChild(chip(fmtDur(it.duration), "dur"));
   div.appendChild(chip(fmtSize(it.size), "size"));
+  if ((it.custom?.length || it.tags?.length)) {
+    const row = document.createElement("div");
+    row.className = "ttags";
+    for (const t of [...(it.custom || []), ...(it.tags || [])].slice(0, 3)) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ttag";
+      b.textContent = t;
+      b.title = t;
+      b.addEventListener("click", (e) => { e.stopPropagation(); addTag(t); });
+      row.appendChild(b);
+    }
+    div.appendChild(row);
+  }
   const sb = document.createElement("button");
   sb.type = "button";
   sb.className = "starbtn" + (it.fav ? " active" : "");
@@ -287,6 +392,7 @@ async function loadMore() {
     const p = new URLSearchParams({
       offset: state.offset, limit: 60,
       category: state.tab, sort: state.random ? "random" : state.sort,
+      tags: state.tags.join(","),
     });
     if (state.random && state.seed) p.set("seed", state.seed);
     const d = await api(`/api/items?${p}`, abortCtl.signal);
@@ -354,6 +460,7 @@ function openLightbox(i) {
 function closeLightbox() {
   stopBoost(lbContent.querySelector("video") || undefined);
   lb.hidden = true;
+  lbTags.hidden = true;
   lbContent.innerHTML = "";
   zimg = null;
   ptrs.clear(); pinch = null; lastPan = null;
@@ -394,7 +501,91 @@ function renderLightbox() {
   }
   lbContent.appendChild(el);
   lbFavBtn.classList.toggle("active", !!it.fav);
+  renderLbTags();
 }
+
+// ---- tags no lightbox: lista (click filtra), customs (× remove), título ----
+const lbTags = document.getElementById("lb-tags");
+const lbTitle = document.getElementById("lb-title");
+const lbTagList = document.getElementById("lb-taglist");
+const lbCustom = document.getElementById("lb-custom");
+const lbTitleInput = document.getElementById("lb-title-input");
+
+function renderLbTags() {
+  const it = state.items[lbIdx];
+  if (!it) { lbTags.hidden = true; return; }
+  lbTags.hidden = false;
+  lbTitle.textContent = it.title || it.name;
+  lbTagList.replaceChildren();
+  for (const t of it.tags || []) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ttag";
+    b.textContent = t;
+    b.title = `filtrar por ${t}`;
+    b.addEventListener("click", () => addTag(t));
+    lbTagList.appendChild(b);
+  }
+  for (const t of it.custom || []) {
+    const s = document.createElement("span");
+    s.className = "tcustom";
+    s.textContent = `${t} `;
+    const x = document.createElement("button");
+    x.type = "button";
+    x.textContent = "×";
+    x.title = "remover";
+    x.setAttribute("aria-label", `Remover ${t}`);
+    x.addEventListener("click", async () => {
+      const r = await fetch(`/api/ctag/${encodeURIComponent(it.name)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ del: [t] }),
+      });
+      if (!r.ok) return;
+      const d = await r.json();
+      it.custom = d.custom || [];
+      renderLbTags();
+    });
+    s.appendChild(x);
+    lbTagList.appendChild(s);
+  }
+  if (document.activeElement !== lbTitleInput) lbTitleInput.value = it.title || "";
+}
+
+lbCustom.addEventListener("keydown", async (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const it = state.items[lbIdx];
+  const v = lbCustom.value.trim();
+  if (!it || !v) return;
+  const r = await fetch(`/api/ctag/${encodeURIComponent(it.name)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ add: [v] }),
+  });
+  if (!r.ok) return;
+  const d = await r.json();
+  it.custom = d.custom || [];
+  lbCustom.value = "";
+  renderLbTags();
+});
+
+lbTitleInput.addEventListener("keydown", async (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  const it = state.items[lbIdx];
+  if (!it) return;
+  const r = await fetch(`/api/title/${encodeURIComponent(it.name)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: lbTitleInput.value }),
+  });
+  if (!r.ok) return;
+  const d = await r.json();
+  it.title = d.title || "";
+  renderLbTags();
+  lbTitleInput.blur();
+});
 
 // ---- zoom de imagens no lightbox --------------------------------------------
 // Pinch com 2 dedos (1x–4x) + pan arrastando quando ampliado; duplo toque /
@@ -710,6 +901,11 @@ new IntersectionObserver((entries) => {
   else if (rp === "0") state.random = false;
   const sp = p.get("seed");
   if (state.random && sp) state.seed = Number(sp) || null;
+  // filtro de tags via deep-link (?tags=a,b)
+  if (p.get("tags")) {
+    state.tags = p.get("tags").split(",").map(normTagUI).filter(Boolean);
+    renderChips();
+  }
   document.querySelectorAll(".tab").forEach((b) => { b.classList.toggle("active", b.dataset.cat === tab); });
   renderSortOptions();
   applyRandomUI();

@@ -78,6 +78,32 @@ Geral porque o navegador não renderiza.
 
 Endpoints: `GET /api/items?category=all|fav|image|gif|video&sort=recent|oldest|size_asc|size_desc|duration_asc|duration_desc|name|random&seed=&offset=&limit=` e `GET /api/stats` (contadores + progresso da análise).
 
+### Tags, nomes e filtro multi-tag
+
+Cada mídia tem um sidecar `{id}_{md5}.json` com as tags do Sankaku, gravado
+pelo downloader via postprocessor `metadata` do gallery-dl. O viewer ingere
+os sidecars para um índice central em `/data/thumbs/tags.json` (mesmo padrão
+de `favorites.json`/`meta.json`).
+
+- **Pesquisa = filtro**: um campo só no topo; Enter empilha N tags (AND sobre
+  tags da fonte + personalizadas). Normalização: minúsculas, espaços→`_`.
+  URL compartilhável: `?tags=a+b`.
+- **Autocomplete**: `GET /api/tags?prefix=&limit=20` (top por frequência).
+- **Tags personalizadas**: no lightbox, `POST /api/ctag/{name}` com
+  `{"add":[],"del":[]}`. Sobrevivem à re-ingestão (fonte e customs separados).
+- **Nome da mídia**: no lightbox, `POST /api/title/{name}` com
+  `{"title":"..."}` (vazio limpa e volta a exibir `id_md5`).
+
+```bash
+# backfill de tags p/ acervo baixado antes dos sidecars (idempotente,
+# pula quem já tem .json; N opcional limita a quantidade)
+docker compose run --rm --entrypoint /app/backfill-tags.sh downloader [N]
+```
+
+Nota de escala: sem SQLite por desenho (1 usuário, sem escrita concorrente;
+filtro em memória + JSON atômico bastam). Reavaliar se `tags.json` passar
+de ~10 MB ou o rewrite por edição ficar perceptível.
+
 ### Painel de download (engrenagem ⚙)
 
 O botão ⚙ no topo abre o painel de status/controle do downloader:

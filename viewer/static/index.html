@@ -43,6 +43,11 @@
       </button>
       <select id="sort" title="Ordenar por" aria-label="Ordenar por"></select>
     </div>
+    <div id="tagbar">
+      <div id="chips"></div>
+      <input id="taginput" type="search" placeholder="filtrar por tags… (Enter adiciona)" autocomplete="off" aria-label="Filtrar por tags">
+      <ul id="suggest" hidden></ul>
+    </div>
   </div>
 </header>
 
@@ -107,6 +112,15 @@
   </div>
 
   <div id="lb-content"></div>
+
+  <div id="lb-tags" hidden>
+    <div id="lb-title"></div>
+    <div id="lb-taglist"></div>
+    <div id="lb-tagedit">
+      <input id="lb-custom" placeholder="+ tag personalizada (Enter)" autocomplete="off" aria-label="Adicionar tag personalizada">
+      <input id="lb-title-input" placeholder="nome da mídia (Enter salva)" autocomplete="off" aria-label="Nome da mídia">
+    </div>
+  </div>
 
   <!-- Indicador de aceleração (segurar no vídeo) -->
   <span id="lb-speed" hidden>▶▶ 2×</span>
