@@ -34,13 +34,16 @@ var (
 
 // Item descreve uma midia do vault para a API/UI.
 type Item struct {
-	Name     string  `json:"name"`
-	Size     int64   `json:"size"`
-	ModTime  int64   `json:"mtime"`
-	MIME     string  `json:"mime"`
-	Kind     string  `json:"kind"`               // image | video | other
-	Duration float64 `json:"duration,omitempty"` // segundos (apenas videos)
-	Fav      bool    `json:"fav,omitempty"`
+	Name     string   `json:"name"`
+	Size     int64    `json:"size"`
+	ModTime  int64    `json:"mtime"`
+	MIME     string   `json:"mime"`
+	Kind     string   `json:"kind"`               // image | video | other
+	Duration float64  `json:"duration,omitempty"` // segundos (apenas videos)
+	Fav      bool     `json:"fav,omitempty"`
+	Tags     []string `json:"tags,omitempty"`
+	Custom   []string `json:"custom,omitempty"`
+	Title    string   `json:"title,omitempty"`
 }
 
 type server struct {
@@ -57,6 +60,7 @@ type server struct {
 	durs   *durationStore
 	docker *dockerMon
 	favs   *favStore
+	tags   *tagStore
 
 	sem chan struct{} // limite de thumbs geradas em paralelo (ffmpeg/decode)
 
@@ -121,6 +125,7 @@ func main() {
 		durs:     newDurationStore(filepath.Join(thumbDir, "meta.json")),
 		docker:   newDockerMon(),
 		favs:     newFavStore(filepath.Join(thumbDir, "favorites.json")),
+		tags:     newTagStore(filepath.Join(thumbDir, "tags.json")),
 		sem:      make(chan struct{}, 2),
 		busy:     map[string]bool{},
 		fails:    map[string]*failRec{},
@@ -167,8 +172,8 @@ func (s *server) rescan() ([]Item, map[string]string) {
 			return nil
 		}
 		name := d.Name()
-		if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".part") {
-			return nil // ocultos e downloads incompletos do gallery-dl
+		if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".part") || strings.HasSuffix(name, ".json") {
+			return nil // ocultos, downloads incompletos e sidecars de tags
 		}
 		info, err := d.Info()
 		if err != nil {
@@ -201,9 +206,33 @@ func (s *server) rescan() ([]Item, map[string]string) {
 			}
 		}
 		it.Fav = s.favs.has(it.Name)
+		if e := s.tags.get(it.Name); e != nil {
+			it.Tags, it.Custom, it.Title = e.Tags, e.Custom, e.Title
+		} else if raw, err := os.ReadFile(filepath.Join(s.mediaDir, it.Name+".json")); err == nil {
+			var side map[string]any
+			if json.Unmarshal(raw, &side) == nil {
+				var tg []string
+				for _, k := range []string{"tags", "tag_names"} {
+					if v, ok := side[k].([]any); ok {
+						for _, x := range v {
+							if str, ok := x.(string); ok {
+								tg = append(tg, str)
+							}
+						}
+						break
+					}
+				}
+				s.tags.ingest(it.Name, tg)
+				if e := s.tags.get(it.Name); e != nil {
+					it.Tags, it.Custom, it.Title = e.Tags, e.Custom, e.Title
+				}
+			}
+		}
 		alive[it.Name] = true
 	}
 	s.durs.prune(alive)
+	s.tags.prune(alive)
+	s.tags.save()
 
 	sort.Slice(items, func(i, j int) bool { return items[i].ModTime > items[j].ModTime })
 
