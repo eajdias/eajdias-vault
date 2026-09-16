@@ -394,6 +394,11 @@ async function loadMore() {
     state.total = d.total;
     countEl.textContent = `${d.total} mídias`;
     emptyBox.hidden = d.total !== 0;
+    if (lbWantMore && !lb.hidden && lbIdx < state.items.length - 1) {
+      lbWantMore = false;
+      lbIdx++;
+      renderLightbox();
+    }
   } catch (e) {
     if (e.name !== "AbortError") { /* silencioso */ }
   }
@@ -402,6 +407,7 @@ async function loadMore() {
 
 function reset() {
   abortCtl?.abort();
+  lbWantMore = false;
   state.offset = 0; state.total = null; state.items.length = 0;
   grid.replaceChildren();
   emptyBox.hidden = true;
@@ -410,6 +416,7 @@ function reset() {
 
 // ---- lightbox ----
 let lbIdx = -1;
+let lbWantMore = false; // ArrowRight no fim do carregado: avança quando a próxima página chegar
 let lbSuppressTap = false; // um hold de 2x não deve alternar a barra
 const lbSpeedEl = document.getElementById("lb-speed");
 let holdTimer = null;
@@ -436,6 +443,21 @@ function wireVideoGestures(v) {
   }
 }
 
+// lbStep navega no lightbox além da página carregada: perto do fim já
+// pré-busca a próxima; no limite, busca e avança quando ela chegar.
+function lbStep(d) {
+  const n = lbIdx + d;
+  if (n < 0) return;
+  if (state.total !== null && n >= state.total) return;
+  if (n < state.items.length) {
+    lbIdx = n;
+    renderLightbox();
+    if (lbIdx >= state.items.length - 3) loadMore(); // prefetch
+    return;
+  }
+  lbWantMore = true;
+  loadMore();
+}
 function openLightbox(i) {
   stopPreview();
   lbIdx = i;
@@ -681,13 +703,13 @@ lbContent.addEventListener("wheel", (e) => {
 }, { passive: false });
 document.getElementById("lb-close").addEventListener("click", closeLightbox);
 lb.addEventListener("click", (e) => { if (e.target === lb) closeLightbox(); });
-document.getElementById("lb-prev").addEventListener("click", () => { if (lbIdx > 0) { lbIdx--; renderLightbox(); } });
-document.getElementById("lb-next").addEventListener("click", () => { if (lbIdx < state.items.length - 1) { lbIdx++; renderLightbox(); } });
+document.getElementById("lb-prev").addEventListener("click", () => lbStep(-1));
+document.getElementById("lb-next").addEventListener("click", () => lbStep(1));
 document.addEventListener("keydown", (e) => {
   if (lb.hidden) return;
   if (e.key === "Escape") closeLightbox();
-  if (e.key === "ArrowLeft" && lbIdx > 0) { lbIdx--; renderLightbox(); }
-  if (e.key === "ArrowRight" && lbIdx < state.items.length - 1) { lbIdx++; renderLightbox(); }
+  if (e.key === "ArrowLeft") lbStep(-1);
+  if (e.key === "ArrowRight") lbStep(1);
 });
 
 // swipe no lightbox (mobile): horizontal E vertical navegam entre mídias;
@@ -696,13 +718,13 @@ function lbSwipe(dx, dy) {
   const adx = Math.abs(dx), ady = Math.abs(dy);
   const MIN = 40; // dedo real curva: limiar um pouco mais permissivo
   if (adx > MIN && ady < adx * 0.9) {
-    if (dx < 0 && lbIdx < state.items.length - 1) { lbIdx++; renderLightbox(); }
-    else if (dx > 0 && lbIdx > 0) { lbIdx--; renderLightbox(); }
+    if (dx < 0) lbStep(1);
+    else if (dx > 0) lbStep(-1);
     return;
   }
   if (ady > MIN && adx < ady * 0.9) {
-    if (dy < 0 && lbIdx < state.items.length - 1) { lbIdx++; renderLightbox(); }
-    else if (dy > 0 && lbIdx > 0) { lbIdx--; renderLightbox(); }
+    if (dy < 0) lbStep(1);
+    else if (dy > 0) lbStep(-1);
   }
 }
 let tX = 0, tY = 0;
