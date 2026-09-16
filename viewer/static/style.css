@@ -272,7 +272,6 @@ body {
   max-height: 76px;
   overflow-y: auto;
 }
-#lb-taglist[hidden] { display: none; }
 #lb-taglist .ttag { font-size: 0.72rem; padding: 3px 9px; }
 .tcustom {
   display: inline-flex;
@@ -296,9 +295,14 @@ body {
   line-height: 1;
   padding: 0 2px;
 }
-#lb-tagbar { display: flex; gap: 6px; }
+#lb-tagenv {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#lb-tagenv[hidden] { display: none; }
 #lb-tags-toggle {
-  flex-shrink: 0;
+  width: 100%;
   height: 34px;
   padding: 0 12px;
   border-radius: 8px;
@@ -309,6 +313,7 @@ body {
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  text-align: left;
 }
 #lb-tags-toggle[aria-expanded="true"] {
   border-color: #7c5cff;
@@ -316,8 +321,7 @@ body {
   color: #fff;
 }
 #lb-custom {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
   height: 34px;
   padding: 0 10px;
   border-radius: 8px;

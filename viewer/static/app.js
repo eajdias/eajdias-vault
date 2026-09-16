@@ -493,6 +493,7 @@ function renderLightbox() {
 // ---- tags no lightbox: atrás de toggle, customs com × para remover --------
 const lbTags = document.getElementById("lb-tags");
 const lbTagsToggle = document.getElementById("lb-tags-toggle");
+const lbTagEnv = document.getElementById("lb-tagenv");
 const lbTagList = document.getElementById("lb-taglist");
 const lbCustom = document.getElementById("lb-custom");
 let lbTagsOpen = localStorage.getItem("sv-show-tags") === "1";
@@ -500,7 +501,7 @@ let lbTagsOpen = localStorage.getItem("sv-show-tags") === "1";
 function syncTagsToggle(n) {
   lbTagsToggle.textContent = `🏷 tags (${n ?? 0})`;
   lbTagsToggle.setAttribute("aria-expanded", String(lbTagsOpen));
-  lbTagList.hidden = !lbTagsOpen;
+  lbTagEnv.hidden = !lbTagsOpen;
 }
 lbTagsToggle.addEventListener("click", () => {
   lbTagsOpen = !lbTagsOpen;
