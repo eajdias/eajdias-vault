@@ -10,7 +10,9 @@ RUN go mod tidy \
 
 FROM alpine:3.20
 RUN apk add --no-cache ffmpeg ca-certificates \
- && adduser -D -H viewer \
+ && addgroup -g 2000 vault \
+ && adduser -D -H -u 20000 viewer \
+ && addgroup viewer vault \
  && mkdir -p /data/thumbs \
  && chown viewer /data/thumbs
 

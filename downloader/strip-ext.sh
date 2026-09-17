@@ -3,6 +3,8 @@
 # Usado como postprocessor "exec" do gallery-dl para ocultar o tipo da midia.
 # Tambem recolhe o sidecar de tags ({midia}.json -> .meta/): conteudo
 # identificavel, fora do alcance de olhada casual e de indexadores.
+# (o pp "metadata" escreve sempre na raiz — filename com "/" vira "_" por
+# sanitizacao do gallery-dl; o recolhimento e aqui + na varredura do entrypoint)
 for f in "$@"; do
 	[ -f "$f" ] || continue
 	case "$f" in

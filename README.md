@@ -80,10 +80,17 @@ Endpoints: `GET /api/items?category=all|fav|image|gif|video&sort=recent|oldest|s
 
 ### Tags, nomes e filtro multi-tag
 
-Cada mídia tem um sidecar `{id}_{md5}.json` com as tags do Sankaku, gravado
-pelo downloader via postprocessor `metadata` do gallery-dl. O viewer ingere
-os sidecars para um índice central em `/data/thumbs/tags.db` (SQLite
-write-through: cada edição é 1 `UPDATE`, nunca reescrita).
+Cada mídia tem um sidecar `.meta/{id}_{md5}.json` com as tags do Sankaku,
+gravado pelo downloader via postprocessor `metadata` do gallery-dl e
+recolhido para `.meta/` pelo `strip-ext.sh` + varredura do entrypoint. O
+viewer ingere os sidecars para um índice central em `/data/thumbs/tags.db`
+(SQLite write-through: cada edição é 1 `UPDATE`, nunca reescrita).
+
+**Opacidade (+18)**: mídias sem extensão e com nomes `id_md5`, sidecars em
+dir oculta, thumbs sem extensão, `umask` restritivo e grupo compartilhado
+`vault` (gid 2000, viewer uid 20000): só os containers leem — o desktop não
+abre nem pre-visualiza sem sudo. `.nomedia` nas duas árvores afasta
+indexadores (Android/Plex).
 
 - **Pesquisa = filtro**: um campo só no topo; Enter empilha N tags (AND sobre
   tags da fonte + personalizadas). Normalização: minúsculas, espaços→`_`.

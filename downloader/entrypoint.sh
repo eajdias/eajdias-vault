@@ -9,9 +9,10 @@
 
 set -u
 
-# opacidade: tudo criado aqui (midias, sidecars, heartbeat, lock) nasce 0600/
-# 0700 do root — usuario do desktop nao abre nem pre-visualiza sem sudo.
-umask 077
+# opacidade: tudo criado aqui nasce 640/750 com grupo vault (gid 2000) — o
+# viewer (membro do grupo) le, o desktop (fora do grupo, sem sudo) nao.
+# setgid nos diretorios: arquivos novos herdam o grupo sozinhos.
+umask 027
 
 # Credenciais hardcoded (projeto totalmente local). Podem ser sobrescritas
 # por variaveis de ambiente/-e no docker compose run.
@@ -31,8 +32,15 @@ MODE="${SYNC_MODE:-full}"
 mkdir -p "$MEDIA_DIR" /data/db
 
 # sidecars de tags moram em .meta/ (oculto): recolhe legados da raiz e
-# sinaliza indexadores de midia (Android/Plex) para ignorarem o vault
+# sinaliza indexadores de midia (Android/Plex) para ignorarem o vault.
+# converge grupo+perms (acervo antigo, one-shots manuais sem umask): no estado
+# estavel os finds abaixo nao tocam em nada (zero fork).
 mkdir -p "$MEDIA_DIR/.meta"
+chmod 2750 "$MEDIA_DIR" "$MEDIA_DIR/.meta" 2>/dev/null
+chgrp 2000 "$MEDIA_DIR" "$MEDIA_DIR/.meta" 2>/dev/null
+find "$MEDIA_DIR" -maxdepth 2 ! -group 2000 -exec chgrp 2000 {} + 2>/dev/null
+find "$MEDIA_DIR" -maxdepth 2 -type f ! -perm 640 -exec chmod 640 {} + 2>/dev/null
+find "$MEDIA_DIR" -maxdepth 1 -type d ! -perm 2750 -exec chmod 2750 {} + 2>/dev/null
 for legacy in "$MEDIA_DIR"/*.json; do
 	[ -f "$legacy" ] || break
 	mv -f -- "$legacy" "$MEDIA_DIR/.meta/"

@@ -4,6 +4,8 @@
 # Idempotente: pula quem ja tem sidecar. Throttle de 2s entre posts.
 # Uso: docker compose run --rm --entrypoint /app/backfill-tags.sh downloader [N]
 set -u
+# opacidade: sidecars 640 (grupo vem do setgid do .meta/)
+umask 027
 SANKAKU_USER="${SANKAKU_USER:-zubirous@gmail.com}"
 SANKAKU_PASS="${SANKAKU_PASS:-Zumbirou\$026}"
 MEDIA_DIR=/data/media

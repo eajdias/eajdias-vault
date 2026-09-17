@@ -6,8 +6,8 @@
 #     .download-status.json) e tenta de novo mais tarde
 set -u
 
-# opacidade: lock 0700 (mesma regra do entrypoint.sh)
-umask 077
+# opacidade: lock 750 + grupo do entrypoint (mesma regra de la)
+umask 027
 
 HOUR="${AUTOSYNC_HOUR:-04:00}"
 H="${HOUR%:*}"
