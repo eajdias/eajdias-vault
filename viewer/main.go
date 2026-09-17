@@ -70,6 +70,8 @@ type server struct {
 	probeLeft  int // videos na fila de analise de duracao
 	probeTotal int
 
+	scanMu sync.Mutex // uma varredura do vault por vez (ver rescan)
+
 	tmu      sync.Mutex
 	inflight map[string]*thumbCall // thumbs em geração (singleflight)
 }
@@ -158,6 +160,18 @@ func main() {
 // TTL folgado (30s): downloads chegam em lote via downloader/autosync, nunca
 // pela UI; em vault grande cada WalkDir custa ~1s e não precisa ser frequente.
 func (s *server) rescan() ([]Item, map[string]string) {
+	s.mu.Lock()
+	if s.items != nil && time.Since(s.indexedAt) < 30*time.Second {
+		items, paths := s.items, s.paths
+		s.mu.Unlock()
+		return items, paths
+	}
+	s.mu.Unlock()
+
+	// no vencimento do TTL, /api/items e /api/stats pedem juntos: serializa e
+	// re-checa — o segundo serve o índice que o primeiro acabou de gerar.
+	s.scanMu.Lock()
+	defer s.scanMu.Unlock()
 	s.mu.Lock()
 	if s.items != nil && time.Since(s.indexedAt) < 30*time.Second {
 		items, paths := s.items, s.paths
@@ -272,23 +286,28 @@ func catOf(it Item) string {
 	}
 }
 
-// matchTags: AND sobre a união de Tags+Custom, tudo normalizado.
-// want vazio casa com tudo.
+// matchTags: AND sobre a união de Tags+Custom.
+// Tags e Custom chegam NORMALIZADOS do tagStore (ingest e load aplicam
+// normTag); só o want é normalizado aqui — barato (1-3 tags) e mantém a
+// função segura para qualquer chamador. Sem mapa por item: O(len(want)).
 func matchTags(it Item, want []string) bool {
-	if len(want) == 0 {
-		return true
-	}
-	have := make(map[string]bool, len(it.Tags)+len(it.Custom))
-	for _, tg := range it.Tags {
-		have[normTag(tg)] = true
-	}
-	for _, tg := range it.Custom {
-		have[normTag(tg)] = true
-	}
-	for _, w := range want {
-		if !have[normTag(w)] {
-			return false
+outer:
+	for _, w0 := range want {
+		w := normTag(w0)
+		if w == "" {
+			continue
 		}
+		for _, tg := range it.Tags {
+			if tg == w {
+				continue outer
+			}
+		}
+		for _, tg := range it.Custom {
+			if tg == w {
+				continue outer
+			}
+		}
+		return false
 	}
 	return true
 }

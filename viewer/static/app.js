@@ -125,10 +125,13 @@ const state = {
   random: localStorage.getItem("sv-random") !== "0", // ON por padrão
   seed: null,
 };
-// rede celular: thumbs menores e páginas curtas (economia de dados no 4G)
+// rede celular: thumbs menores e páginas curtas. tier lento = saveData, 2g ou
+// 3g (uma página de 60 thumbs w=400 pesa ~4MB — ~30s no 3G); DPR alto só
+// aumenta a thumb em rede rápida.
 const net = navigator.connection || {};
-const thumbW = net.saveData || String(net.effectiveType || "").includes("2g") ? 320 : (devicePixelRatio > 2 ? 800 : 400);
-const pageLimit = net.saveData ? 30 : 60;
+const slowNet = net.saveData || /[23]g/.test(String(net.effectiveType || ""));
+const thumbW = slowNet ? 320 : (devicePixelRatio > 2 ? 800 : 400);
+const pageLimit = slowNet ? 30 : 60;
 let abortCtl = null;
 
 async function api(url, signal) {
@@ -505,7 +508,7 @@ function renderLightbox() {
   if (it.kind === "video") {
     el = document.createElement("video");
     el.controls = true; el.autoplay = true; el.playsInline = true; el.preload = "metadata";
-    el.poster = `/thumb/${encodeURIComponent(it.name)}?w=400`; // thumb já em cache: pintura instantânea
+    el.poster = `/thumb/${encodeURIComponent(it.name)}?w=${thumbW}`; // thumb já em cache: pintura instantânea
     el.src = src;
     el.loop = true; // reprodução em loop infinito por padrão
     el.controlsList = "nodownload";

@@ -82,8 +82,8 @@ Endpoints: `GET /api/items?category=all|fav|image|gif|video&sort=recent|oldest|s
 
 Cada mídia tem um sidecar `{id}_{md5}.json` com as tags do Sankaku, gravado
 pelo downloader via postprocessor `metadata` do gallery-dl. O viewer ingere
-os sidecars para um índice central em `/data/thumbs/tags.json` (mesmo padrão
-de `favorites.json`/`meta.json`).
+os sidecars para um índice central em `/data/thumbs/tags.db` (SQLite
+write-through: cada edição é 1 `UPDATE`, nunca reescrita).
 
 - **Pesquisa = filtro**: um campo só no topo; Enter empilha N tags (AND sobre
   tags da fonte + personalizadas). Normalização: minúsculas, espaços→`_`.
@@ -98,9 +98,10 @@ de `favorites.json`/`meta.json`).
 docker compose run --rm --entrypoint /app/backfill-tags.sh downloader [N]
 ```
 
-Nota de escala: sem SQLite por desenho (1 usuário, sem escrita concorrente;
-filtro em memória + JSON atômico bastam). Reavaliar se `tags.json` passar
-de ~10 MB ou o rewrite por edição ficar perceptível.
+Nota de escala: só as tags usam SQLite (era o único estado que estourava o
+teto: rewrite integral de 12–18MB por edição @20k mídias). `favorites.json`,
+`filecache.json` e `meta.json` continuam JSON — reavaliar (tabela no mesmo
+`.db`) se algum rewrite ficar perceptível.
 
 ### Painel de download (engrenagem ⚙, somente leitura)
 
@@ -120,6 +121,19 @@ ativo (manual ou do próprio autosync), adia 30 min sozinho. Um lock por `mkdir`
 `/data/db/.autosync-lock` impede duas instâncias simultâneas (lock obsoleto de
 restart sujo é limpo no boot). Logs:
 `docker compose logs -f autosync`. Para desativar: `docker compose stop autosync`.
+
+### Backup
+
+Os únicos dados insubstituíveis estão no volume `vault_thumbs`: `tags.db`
+(suas tags personalizadas) e `favorites.json` (estrelas). Mídias e
+`archive.sqlite` são recuperáveis (re-download pula o que já existe). Com o
+viewer **parado** (SQLite em WAL não tolera cópia com escrita concorrente):
+
+```bash
+docker compose stop viewer
+docker run --rm -v sank-vault_vault_thumbs:/src -v ~/backup:/dst alpine cp -r /src "/dst/zub-vault-thumbs-$(date +%F)"
+docker compose start viewer
+```
 
 ## Variáveis (opcionais — padrões hardcoded)
 
