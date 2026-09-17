@@ -132,21 +132,36 @@ restart sujo é limpo no boot). Logs:
 
 ### Backup
 
-Os únicos dados insubstituíveis estão no volume `vault_thumbs`: `tags.db`
-(suas tags personalizadas) e `favorites.json` (estrelas). Mídias e
-`archive.sqlite` são recuperáveis (re-download pula o que já existe). Com o
-viewer **parado** (SQLite em WAL não tolera cópia com escrita concorrente):
+Dado vivo em volumes (invisível no desktop — ver § Homelab), cópias no disco
+homelab (`BK=<disco-homelab>/backup/zub-vault`). Tudo com o viewer **ligado**:
 
-```bash
-docker compose stop viewer
-docker run --rm -v sank-vault_vault_thumbs:/src -v ~/backup:/dst alpine cp -r /src "/dst/zub-vault-thumbs-$(date +%F)"
-docker compose start viewer
-```
-(com bind mounts, copie a pasta `thumbs/` do host com o viewer parado.)
+| O quê | Comando | Por que é seguro |
+|---|---|---|
+| mídias + `.meta/` (`vault_media`) | `docker run --rm -v sank-vault_vault_media:/src -v $BK:/dst alpine sh -c 'apk add -q rsync && rsync -a --delete /src/ /dst/media/'` | acervo append-only: incremental, só o novo viaja |
+| `tags.db` (customs) | `docker run --rm --entrypoint python3 -v sank-vault_vault_thumbs:/t:ro -v $BK:/b zub-vault-downloader -c "import sqlite3; s=sqlite3.connect('file:/t/tags.db?mode=ro', uri=True); d=sqlite3.connect('/b/tags.db'); s.backup(d)"` | hot backup pela API do sqlite (WAL consistente, zero downtime) |
+| resto do `vault_thumbs` (thumbs, favs, caches) | `docker run --rm -v sank-vault_vault_thumbs:/src -v $BK:/dst alpine sh -c 'cp -a /src/. /dst/thumbs/ && rm -f /dst/thumbs/tags.db*'` | escrita atômica tmp+rename em tudo: cópia nunca pega meio-arquivo (o trio do sqlite vem do hot backup) |
+| `archive.sqlite` (`vault_db`) | junto do rsync, ou nada | re-download cobre a perda |
+
+Insufstituível de verdade: `tags.db` + `favorites.json`. O resto se
+reconstrói (re-download pula o existente; thumbs regeneram; caches
+recomputam). Frequência sugerida: diário via rotina existente do homelab.
+Nota: as cópias nascem root-owned/restritas (a opacidade viaja junto) —
+rotação e limpeza no host exigem root ou container auxiliar com o bind.
 
 ### Homelab e opacidade (+18)
 
-Layout alvo no disco do homelab (backup simples, sobrevive a troca de SO):
+Desenho: dado vivo em **volumes Docker** (não em pastas). Por quê:
+`/var/lib/docker` é `drwx--x--- root` — o desktop nem lista o conteúdo, e
+visualizadores/indexadores (Nautilus, Plex, apps de foto) nunca olham para
+lá; somado às perms do projeto (640/2750 `root:vault`, thumbs 600 uid
+20000), olhada casual e thumbnail automático morrem em 2 barreiras. O disco
+homelab entra como **destino dos backups** (§ anterior) — é isso que
+sobrevive à morte do disco raiz / troca de SO (volumes moram no disco raiz;
+restore = `cp -a` de volta + up).
+
+Alternativa (não recomendada por padrão): bind mounts com `*_BIND` no `.env`
+— dado vivo direto no homelab, zero restore, mas a pasta existe e as perms
+viram a única barreira:
 
 ```
 <disco>/docker/zub-vault/   <- este repo
