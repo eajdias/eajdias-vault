@@ -13,6 +13,7 @@ services:
         required: false
     environment:
       GDL_EXTRA_ARGS: ${GDL_EXTRA_ARGS:-}
+      SAMPLE_INTERVAL: ${SAMPLE_INTERVAL:-15} # heartbeat: du+find a cada N s (3s sua IO em vault grande)
     volumes:
       - vault_media:/data/media
       - vault_db:/data/db
@@ -47,6 +48,7 @@ services:
         required: false
     environment:
       AUTOSYNC_HOUR: ${AUTOSYNC_HOUR:-04:00}
+      SAMPLE_INTERVAL: ${SAMPLE_INTERVAL:-15} # idem downloader (autosync usa o mesmo entrypoint)
     volumes:
       - vault_media:/data/media
       - vault_db:/data/db

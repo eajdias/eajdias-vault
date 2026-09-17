@@ -120,8 +120,13 @@ func trimSpaceBytes(b []byte) string {
 func (s *server) startDurationProber() {
 	go func() {
 		for {
-			s.probePass()
-			time.Sleep(30 * time.Second)
+			if s.probePass() {
+				time.Sleep(30 * time.Second)
+			} else {
+				// ocioso: downloads chegam em lote via downloader; evita
+				// WalkDir completo a cada 30s para sempre em vault grande
+				time.Sleep(10 * time.Minute)
+			}
 		}
 	}()
 }
@@ -133,7 +138,7 @@ func (s *server) probeStats() (left, total int) {
 	return s.probeLeft, s.probeTotal
 }
 
-func (s *server) probePass() {
+func (s *server) probePass() bool {
 	items, paths := s.rescan()
 
 	var targets []Item
@@ -152,7 +157,7 @@ func (s *server) probePass() {
 	s.probeMu.Unlock()
 
 	if len(targets) == 0 {
-		return
+		return false
 	}
 	log.Printf("[sank-vault] analisando duração de %d vídeos...", len(targets))
 
@@ -183,4 +188,5 @@ func (s *server) probePass() {
 	wg.Wait()
 	s.durs.save()
 	log.Printf("[sank-vault] análise de duração concluída")
+	return true
 }

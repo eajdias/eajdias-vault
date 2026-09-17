@@ -155,9 +155,11 @@ func main() {
 // ---- indice / listagem -----------------------------------------------------
 
 // rescan devolve o indice de midias, reescaneando o volume se o cache estiver velho.
+// TTL folgado (30s): downloads chegam em lote via downloader/autosync, nunca
+// pela UI; em vault grande cada WalkDir custa ~1s e não precisa ser frequente.
 func (s *server) rescan() ([]Item, map[string]string) {
 	s.mu.Lock()
-	if s.items != nil && time.Since(s.indexedAt) < 8*time.Second {
+	if s.items != nil && time.Since(s.indexedAt) < 30*time.Second {
 		items, paths := s.items, s.paths
 		s.mu.Unlock()
 		return items, paths
