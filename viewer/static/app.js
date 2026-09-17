@@ -408,6 +408,7 @@ async function loadMore() {
 function reset() {
   abortCtl?.abort();
   lbWantMore = false;
+  thumbUnload.disconnect(); // solta observações de cards descartados
   state.offset = 0; state.total = null; state.items.length = 0;
   grid.replaceChildren();
   emptyBox.hidden = true;
@@ -800,11 +801,7 @@ document.getElementById("logout").addEventListener("click", async () => {
 const dlpanel = document.getElementById("dlpanel");
 const dlBody = document.getElementById("dl-body");
 const dlHint = document.getElementById("dl-hint");
-const btnStart = document.getElementById("dl-start");
-const btnSync = document.getElementById("dl-sync");
-const btnStop = document.getElementById("dl-stop");
 let dlTimer = null;
-let dlActionBusy = false;
 
 function dlRow(label, value, cls) {
   return `<div class="dlrow"><span>${label}</span><b${cls ? ` class="${cls}"` : ""}>${value}</b></div>`;
@@ -820,7 +817,6 @@ function renderDl(st) {
   const stateCls = st.active ? (st.stuck ? "warn" : "ok") : "";
   let html = "";
   html += dlRow("Estado", st.stuck ? "⚠ sem progresso" : phaseLabel, stateCls);
-  if (st.active) html += dlRow("Iniciado", st.source === "ui" ? "pela UI" : "pelo terminal");
   if (st.sync_mode) html += dlRow("Modo", st.sync_mode === "incremental" ? "sync rápido" : "completo");
   if (st.active) {
     html += dlRow("Taxa", `${fmtSize(st.rate_bps)}/s`);
@@ -830,16 +826,10 @@ function renderDl(st) {
   if (st.age_s !== undefined && st.updated_at) html += dlRow("Última atividade", st.age_s < 90 ? `há ${st.age_s}s` : new Date(st.updated_at * 1000).toLocaleTimeString());
   dlBody.innerHTML = html;
 
-  btnStart.disabled = btnSync.disabled = st.active || !st.docker_ok || dlActionBusy;
-  btnStop.disabled = !st.active || !st.docker_ok || dlActionBusy;
-  if (!st.docker_ok) {
-    dlHint.textContent = "controle indisponível: socket do Docker não montado no viewer";
-  } else if (st.stuck) {
-    dlHint.textContent = "nenhum progresso há mais de 3 min — considere Parar e iniciar de novo";
-  } else if (st.active) {
-    dlHint.textContent = "";
+  if (st.stuck) {
+    dlHint.textContent = "nenhum progresso há mais de 3 min — pare pelo terminal (Ctrl+C) e inicie de novo";
   } else {
-    dlHint.textContent = "";
+    dlHint.textContent = "início e parada pelo terminal: docker compose run --rm downloader";
   }
 }
 
@@ -849,21 +839,6 @@ async function refreshDl() {
     if (r.ok) renderDl(await r.json());
   } catch { /* silencioso */ }
 }
-
-async function dlAction(url) {
-  if (dlActionBusy) return;
-  dlActionBusy = true;
-  try {
-    await fetch(url, { method: "POST" });
-    refreshDl();
-  } catch { /* silencioso */ } finally {
-    dlActionBusy = false;
-  }
-}
-
-btnStart.addEventListener("click", () => dlAction("/api/download/start?mode=full"));
-btnSync.addEventListener("click", () => dlAction("/api/download/start?mode=incremental"));
-btnStop.addEventListener("click", () => dlAction("/api/download/stop"));
 
 function openDl() {
   dlpanel.hidden = false;

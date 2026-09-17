@@ -773,44 +773,6 @@ html, body { overscroll-behavior: none; }
 .dlrow b.ok { color: #7ee787; }
 .dlrow b.warn { color: #f0b72f; }
 
-.dl-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 1rem;
-}
-.btn {
-  flex: 1;
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid #2c2f3d;
-  background: #1e202c;
-  color: #dfe2f0;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.btn.primary {
-  background: #7c5cff;
-  border-color: #7c5cff;
-  color: #fff;
-}
-.btn.danger {
-  background: #e0455f22;
-  border-color: #e0455f55;
-  color: #ff6b81;
-}
-.btn.danger:hover:not(:disabled) {
-  background: #e0455f;
-  color: #fff;
-}
-.btn:hover:not(:disabled) { filter: brightness(1.15); }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
 #dl-hint {
   font-size: 0.78rem;
   color: #8f93a8;
@@ -906,8 +868,5 @@ html, body { overscroll-behavior: none; }
   .dlcard {
     padding: 1rem;
     border-radius: 12px;
-  }
-  .dl-actions {
-    flex-direction: column;
   }
 }

@@ -57,7 +57,6 @@ type server struct {
 	indexedAt time.Time
 
 	durs   *durationStore
-	docker *dockerMon
 	favs   *favStore
 	tags   *tagStore
 	fcache *fileCache
@@ -123,7 +122,6 @@ func main() {
 		password: env("VIEWER_PASSWORD", "Sankvault@123"),
 		secret:   newSecret(filepath.Join(thumbDir, ".session_secret")),
 		durs:     newDurationStore(filepath.Join(thumbDir, "meta.json")),
-		docker:   newDockerMon(),
 		favs:     newFavStore(filepath.Join(thumbDir, "favorites.json")),
 		tags:     newTagStore(filepath.Join(thumbDir, "tags.json")),
 		fcache:   newFileCache(filepath.Join(thumbDir, "filecache.json")),
@@ -141,8 +139,6 @@ func main() {
 	mux.HandleFunc("POST /api/fav/{name}", srv.requireAuth(srv.handleFavToggle))
 	mux.HandleFunc("POST /api/ctag/{name}", srv.requireAuth(srv.handleCTag))
 	mux.HandleFunc("GET /api/download/status", srv.requireAuth(srv.handleDlStatus))
-	mux.HandleFunc("POST /api/download/start", srv.requireAuth(srv.handleDlStart))
-	mux.HandleFunc("POST /api/download/stop", srv.requireAuth(srv.handleDlStop))
 	mux.HandleFunc("GET /media/{name}", srv.requireAuth(srv.handleMedia))
 	mux.HandleFunc("GET /thumb/{name}", srv.requireAuth(srv.handleThumb))
 	mux.HandleFunc("GET /login", srv.handleLogin)

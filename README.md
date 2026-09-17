@@ -102,34 +102,23 @@ Nota de escala: sem SQLite por desenho (1 usuário, sem escrita concorrente;
 filtro em memória + JSON atômico bastam). Reavaliar se `tags.json` passar
 de ~10 MB ou o rewrite por edição ficar perceptível.
 
-### Painel de download (engrenagem ⚙)
+### Painel de download (engrenagem ⚙, somente leitura)
 
-O botão ⚙ no topo abre o painel de status/controle do downloader:
+O botão ⚙ no topo mostra o status do downloader (fase, taxa, sessão, vault)
+lido do heartbeat em `/data/media/.download-status.json`. Downloads nunca
+são disparados pela UI: início e parada acontecem pelo terminal
+(`docker compose run --rm downloader`) ou pelo `autosync`.
 
-- **Estado ao vivo**: fase (baixando/concluído/interrompido), taxa (MB/s),
-  arquivos e volume baixados na sessão, tamanho total do vault. O downloader
-  publica um heartbeat a cada 3s em `/data/media/.download-status.json`
-  (arquivo oculto — não aparece na galeria).
-- **Botões**: *Baixar agora* (`SYNC_MODE=full`), *Sync rápido*
-  (`SYNC_MODE=incremental`) e *Parar* — equivalem a
-  `docker compose run --rm -e SYNC_MODE=… downloader` e `docker stop`, via
-  Docker API no socket montado no viewer. Se o socket não estiver montado,
-  o painel vira somente-leitura.
-- Iniciando pela UI, o container recebe o label `sank-vault.downloader` e é
-  removido automaticamente ao terminar; runs iniciados pelo terminal também
-  são detectados e podem ser parados pelo painel.
-- Aviso de travamento: sem progresso por >3 min, o estado mostra
-  "⚠ sem progresso".
-
-Endpoints: `GET /api/download/status`, `POST /api/download/start?mode=full|incremental` (409 se já ativo), `POST /api/download/stop`.
+Endpoints: `GET /api/download/status`.
 
 ### Sync automático diário
 
 O serviço `autosync` roda sempre (restart: unless-stopped) e dispara um **sync
 incremental** todo dia às **04:00** (`AUTOSYNC_HOUR` no `.env` para mudar).
 Antes de rodar ele verifica o heartbeat do painel: se já houver um download
-ativo (manual ou pela UI), adia 30 min sozinho. Um lock por `mkdir` em
-`/data/db/.autosync-lock` impede duas instâncias simultâneas. Logs:
+ativo (manual ou do próprio autosync), adia 30 min sozinho. Um lock por `mkdir` em
+`/data/db/.autosync-lock` impede duas instâncias simultâneas (lock obsoleto de
+restart sujo é limpo no boot). Logs:
 `docker compose logs -f autosync`. Para desativar: `docker compose stop autosync`.
 
 ## Variáveis (opcionais — padrões hardcoded)

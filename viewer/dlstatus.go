@@ -1,22 +1,15 @@
 package main
 
-// dlstatus.go — painel de download da UI.
+// dlstatus.go — painel de status do downloader (somente leitura).
 //
-// Mescla duas fontes:
-//   1. heartbeat escrito pelo entrypoint.sh em /data/media/.download-status.json
-//      (fase, taxa, bytes/arquivos da sessão — sobrevive mesmo sem Docker API);
-//   2. estado real do container do downloader via Docker Engine API (rodando?,
-//      iniciado pela UI ou pelo terminal, modo de sync).
-//
-// Se o socket do Docker não estiver disponível, docker_ok=false e a UI esconde
-// os botões de controle (somente-leitura).
+// Lê o heartbeat escrito pelo entrypoint.sh em /data/media/.download-status.json
+// (fase, taxa, bytes/arquivos da sessão). Downloads nunca são disparados pela
+// UI: início e parada acontecem pelo terminal ou pelo autosync.
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -46,11 +39,8 @@ func readShellStatus(mediaDir string) shellStatus {
 }
 
 type dlStatus struct {
-	DockerOK     bool   `json:"docker_ok"`
 	Active       bool   `json:"active"`
-	Source       string `json:"source,omitempty"`          // ui | cli
-	State        string `json:"container_state,omitempty"` // running | exited | ...
-	SyncMode     string `json:"sync_mode,omitempty"`       // full | incremental
+	SyncMode     string `json:"sync_mode,omitempty"` // full | incremental
 	Phase        string `json:"phase,omitempty"`
 	RateBPS      int64  `json:"rate_bps"`
 	SessionFiles int64  `json:"session_files"`
@@ -65,49 +55,18 @@ type dlStatus struct {
 const stuckAfterNoProgress = 180 * time.Second
 
 func (s *server) currentDLStatus() dlStatus {
-	st := dlStatus{DockerOK: s.docker.avaliavel}
+	st := dlStatus{}
 	now := time.Now().Unix()
 
-	if s.docker.avaliavel {
-		cs, err := s.docker.listDownloaders()
-		if err == nil {
-			for _, c := range cs {
-				if c.State != "running" {
-					continue
-				}
-				st.Active = true
-				st.State = c.State
-				if _, viaUI := c.Labels[dlLabel]; viaUI {
-					st.Source = "ui"
-				} else {
-					st.Source = "cli"
-				}
-				envs, _ := s.docker.inspectEnv(c.ID)
-				for _, e := range envs {
-					if strings.HasPrefix(e, "SYNC_MODE=") {
-						st.SyncMode = e[len("SYNC_MODE="):]
-					}
-				}
-				break
-			}
-		}
-	}
-
 	sh := readShellStatus(s.mediaDir)
-	// ativo se o container roda OU o heartbeat é recente (<15s)
-	hbFresh := sh.UpdatedAt > 0 && time.Now().Unix()-sh.UpdatedAt < 15
-	if !st.Active && hbFresh {
-		st.Active = true
-	}
+	// ativo = heartbeat diz rodando E é recente (<15s)
+	hbFresh := sh.UpdatedAt > 0 && now-sh.UpdatedAt < 15
+	st.Active = sh.Running == 1 && hbFresh
 	if st.Active {
-		if sh.Running == 1 {
-			st.Phase = sh.Phase
-			st.SyncMode = sh.Mode
-			if st.SyncMode == "" {
-				st.SyncMode = "full" // default do entrypoint
-			}
-		} else if st.Phase == "" {
-			st.Phase = "baixando"
+		st.Phase = sh.Phase
+		st.SyncMode = sh.Mode
+		if st.SyncMode == "" {
+			st.SyncMode = "full" // default do entrypoint
 		}
 	} else if sh.UpdatedAt > 0 {
 		st.Phase = sh.Phase // último desfecho: concluido | interrompido
@@ -134,29 +93,5 @@ func (s *server) currentDLStatus() dlStatus {
 }
 
 func (s *server) handleDlStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.currentDLStatus())
-}
-
-func (s *server) handleDlStart(w http.ResponseWriter, r *http.Request) {
-	mode := r.URL.Query().Get("mode")
-	if mode != "incremental" && mode != "full" {
-		mode = "full"
-	}
-	if err := s.docker.startDownloader(mode); err != nil {
-		if errors.Is(err, errDownloadActive) {
-			writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, s.currentDLStatus())
-}
-
-func (s *server) handleDlStop(w http.ResponseWriter, r *http.Request) {
-	if err := s.docker.stopDownloader(); err != nil {
-		writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error()})
-		return
-	}
 	writeJSON(w, http.StatusOK, s.currentDLStatus())
 }
