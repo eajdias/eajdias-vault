@@ -123,7 +123,7 @@ func main() {
 		secret:   newSecret(filepath.Join(thumbDir, ".session_secret")),
 		durs:     newDurationStore(filepath.Join(thumbDir, "meta.json")),
 		favs:     newFavStore(filepath.Join(thumbDir, "favorites.json")),
-		tags:     newTagStore(filepath.Join(thumbDir, "tags.json")),
+		tags:     newTagStore(filepath.Join(thumbDir, "tags.db")),
 		fcache:   newFileCache(filepath.Join(thumbDir, "filecache.json")),
 		sem:      make(chan struct{}, 2),
 		inflight: map[string]*thumbCall{},
@@ -241,7 +241,6 @@ func (s *server) rescan() ([]Item, map[string]string) {
 	}
 	s.tags.prune(alive)
 	s.fcache.prune(alive)
-	s.tags.saveIfDirty()
 	s.fcache.saveIfDirty()
 
 	sort.Slice(items, func(i, j int) bool { return items[i].ModTime > items[j].ModTime })

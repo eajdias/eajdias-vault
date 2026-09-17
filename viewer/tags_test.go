@@ -19,12 +19,19 @@ func TestNormTag(t *testing.T) {
 	}
 }
 
+func newTestStore(t *testing.T) *tagStore {
+	t.Helper()
+	ts := newTagStore(filepath.Join(t.TempDir(), "tags.db"))
+	t.Cleanup(func() { ts.Close() })
+	return ts
+}
+
 func TestTagStoreIngestPreservesCustom(t *testing.T) {
-	ts := newTagStore(filepath.Join(t.TempDir(), "tags.json"))
+	ts := newTestStore(t)
 	ts.ingest("1_abc", []string{"1girl", "Long Hair"})
-	ts.data["1_abc"].Custom = []string{"minha_tag"}
+	ts.editCustom("1_abc", []string{"minha_tag"}, nil)
 	ts.ingest("1_abc", []string{"1girl", "long_hair", "new_tag"})
-	e := ts.data["1_abc"]
+	e := ts.get("1_abc")
 	if len(e.Custom) != 1 || e.Custom[0] != "minha_tag" {
 		t.Fatalf("custom perdido: %+v", e)
 	}
@@ -37,19 +44,25 @@ func TestTagStoreIngestPreservesCustom(t *testing.T) {
 	}
 }
 
-func TestTagStoreFreq(t *testing.T) {
-	ts := newTagStore(filepath.Join(t.TempDir(), "tags.json"))
+func TestTagStoreFreqCached(t *testing.T) {
+	ts := newTestStore(t)
 	ts.ingest("1_a", []string{"1girl", "solo"})
 	ts.ingest("2_b", []string{"1girl"})
-	ts.data["2_b"].Custom = []string{"solo"}
+	ts.editCustom("2_b", []string{"solo"}, nil)
 	f := ts.freq()
 	if f["1girl"] != 2 || f["solo"] != 2 {
 		t.Fatalf("freq errada: %+v", f)
 	}
+	// segunda chamada usa o cache; mudança invalida
+	ts.editCustom("2_b", nil, []string{"solo"})
+	f = ts.freq()
+	if f["solo"] != 1 {
+		t.Fatalf("cache nao invalidado: %+v", f)
+	}
 }
 
 func TestTagStoreCustomAddDel(t *testing.T) {
-	ts := newTagStore(filepath.Join(t.TempDir(), "tags.json"))
+	ts := newTestStore(t)
 	ts.ingest("1_a", []string{"1girl"})
 	got := ts.editCustom("1_a", []string{"Minha Tag", "1girl"}, nil)
 	if len(got.Custom) != 2 {
@@ -61,13 +74,14 @@ func TestTagStoreCustomAddDel(t *testing.T) {
 	}
 }
 
-func TestTagStoreSaveLoad(t *testing.T) {
+func TestTagStorePersistsAcrossReopen(t *testing.T) {
 	dir := t.TempDir()
-	ts := newTagStore(filepath.Join(dir, "tags.json"))
+	ts := newTagStore(filepath.Join(dir, "tags.db"))
 	ts.ingest("1_a", []string{"1girl"})
 	ts.editCustom("1_a", []string{"minha"}, nil)
-	ts.save()
-	ts2 := newTagStore(filepath.Join(dir, "tags.json"))
+	ts.Close()
+	ts2 := newTagStore(filepath.Join(dir, "tags.db"))
+	t.Cleanup(func() { ts2.Close() })
 	e := ts2.get("1_a")
 	if e == nil || len(e.Tags) != 1 || e.Tags[0] != "1girl" || len(e.Custom) != 1 || e.Custom[0] != "minha" {
 		t.Fatalf("reload falhou: %+v", e)
