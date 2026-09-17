@@ -187,9 +187,7 @@ O que a opacidade cobre e o que não cobre:
   extensão + `.nomedia`).
 - ❌ Não cobre: acesso **determinado** (root/sudo no host abre tudo) nem
   compartilhamento com squash/all-access (SMB com `force user` ou guest
-  ignora perms do Linux — o desktop enxerga tudo). Para esses casos a
-  resposta é cifra em repouso (ver `docs/gocryptfs-nivel2.md`, com a chave
-  **fora** da árvore compartilhada).
+  ignora perms do Linux — o desktop enxerga tudo). Limitação assumida.
 
 ## Variáveis (opcionais — padrões hardcoded)
 
