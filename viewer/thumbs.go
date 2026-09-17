@@ -38,8 +38,10 @@ func decodableImage(mime string) bool {
 }
 
 func thumbKey(name string, width int) string {
+	// sem extensão de propósito: indexadores de mídia (Plex/Jellyfin/apps de
+	// foto) filtram por extensão e ignoram o cache; o Content-Type vai no header
 	sum := sha256.Sum256([]byte(name))
-	return hex.EncodeToString(sum[:])[:20] + "_" + strconv.Itoa(width) + ".jpg"
+	return hex.EncodeToString(sum[:])[:20] + "_" + strconv.Itoa(width)
 }
 
 // handleThumb devolve um JPEG reduzido da midia, gerando sob demanda e cacheando.

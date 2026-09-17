@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -97,6 +98,10 @@ func env(k, def string) string {
 }
 
 func main() {
+	// opacidade: thumbs, tags.db e caches nascem 0600/0700 do usuario do
+	// viewer — sem leitura nem thumbnail no desktop sem sudo.
+	syscall.Umask(0o077)
+
 	indexHTML, _ = fs.ReadFile(staticFS, "static/index.html")
 	appJS, _ = fs.ReadFile(staticFS, "static/app.js")
 	styleCSS, _ = fs.ReadFile(staticFS, "static/style.css")
@@ -116,6 +121,10 @@ func main() {
 	}
 	if err := os.MkdirAll(thumbDir, 0o755); err != nil {
 		log.Fatal(err)
+	}
+	// sinaliza indexadores de midia (Android/Plex) para ignorarem o cache
+	if f, err := os.OpenFile(filepath.Join(thumbDir, ".nomedia"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600); err == nil {
+		f.Close()
 	}
 
 	srv := &server{
@@ -228,7 +237,7 @@ func (s *server) rescan() ([]Item, map[string]string) {
 		it.Fav = s.favs.has(it.Name)
 		if e := s.tags.get(it.Name); e != nil {
 			it.Tags, it.Custom = e.Tags, e.Custom
-		} else if raw, err := os.ReadFile(filepath.Join(s.mediaDir, it.Name+".json")); err == nil {
+		} else if raw, err := readSidecar(s.mediaDir, it.Name); err == nil {
 			var side map[string]any
 			if json.Unmarshal(raw, &side) == nil {
 				var tg []string
@@ -269,6 +278,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
+}
+
+// readSidecar lê as tags da fonte: .meta/{nome}.json, com fallback para a
+// raiz (sidecars legados de antes da mudança).
+func readSidecar(mediaDir, name string) ([]byte, error) {
+	if raw, err := os.ReadFile(filepath.Join(mediaDir, ".meta", name+".json")); err == nil {
+		return raw, nil
+	}
+	return os.ReadFile(filepath.Join(mediaDir, name+".json"))
 }
 
 // catOf deriva a aba da UI a partir do mime: videos, gifs (animados ou nao),

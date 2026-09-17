@@ -9,6 +9,10 @@
 
 set -u
 
+# opacidade: tudo criado aqui (midias, sidecars, heartbeat, lock) nasce 0600/
+# 0700 do root — usuario do desktop nao abre nem pre-visualiza sem sudo.
+umask 077
+
 # Credenciais hardcoded (projeto totalmente local). Podem ser sobrescritas
 # por variaveis de ambiente/-e no docker compose run.
 DEFAULT_USER='zubirous@gmail.com'
@@ -26,6 +30,15 @@ MODE="${SYNC_MODE:-full}"
 
 mkdir -p "$MEDIA_DIR" /data/db
 
+# sidecars de tags moram em .meta/ (oculto): recolhe legados da raiz e
+# sinaliza indexadores de midia (Android/Plex) para ignorarem o vault
+mkdir -p "$MEDIA_DIR/.meta"
+for legacy in "$MEDIA_DIR"/*.json; do
+	[ -f "$legacy" ] || break
+	mv -f -- "$legacy" "$MEDIA_DIR/.meta/"
+done
+touch "$MEDIA_DIR/.nomedia"
+
 # ---- heartbeat -------------------------------------------------------------
 
 NOW() { date +%s; }
@@ -39,8 +52,8 @@ write_status() {
 }
 
 sample() {
-	# devolve "<num_arquivos> <bytes>" (du em KB -> bytes; sidecars *.json
-	# de tags nao contam como midias do vault)
+	# devolve "<num_arquivos> <bytes>" (du em KB -> bytes; sidecars de tags
+	# em .meta/ nao contam como midias do vault)
 	du_out=$(du -sk "$MEDIA_DIR" 2>/dev/null | cut -f1)
 	echo "$(find "$MEDIA_DIR" -maxdepth 1 -type f ! -name '.*' ! -name '*.json' 2>/dev/null | wc -l) $((${du_out:-0} * 1024))"
 }
