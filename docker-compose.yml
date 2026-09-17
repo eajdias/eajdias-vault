@@ -63,10 +63,16 @@ services:
 #
 # Os `name:` preservam os volumes criados na era `sank-vault` (antes do
 # rename): sem eles o compose criaria volumes vazios e o vault "sumiria".
+# `external: true`: os volumes têm vida própria — `down -v` nunca os apaga
+# (proteção contra dedo nervoso) e o warning de label some. Setup do zero: crie antes
+# com `docker volume create sank-vault_vault_media` (+ _db, + _thumbs).
 volumes:
   vault_media:   # midias sem extensao (dentro do disco do Docker/WSL2)
     name: sank-vault_vault_media
+    external: true
   vault_db:      # archive.sqlite -> deduplicacao entre execucoes
     name: sank-vault_vault_db
+    external: true
   vault_thumbs:  # cache de miniaturas do viewer
     name: sank-vault_vault_thumbs
+    external: true
