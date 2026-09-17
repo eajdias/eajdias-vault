@@ -125,6 +125,10 @@ const state = {
   random: localStorage.getItem("sv-random") !== "0", // ON por padrão
   seed: null,
 };
+// rede celular: thumbs menores e páginas curtas (economia de dados no 4G)
+const net = navigator.connection || {};
+const thumbW = net.saveData || String(net.effectiveType || "").includes("2g") ? 320 : (devicePixelRatio > 2 ? 800 : 400);
+const pageLimit = net.saveData ? 30 : 60;
 let abortCtl = null;
 
 async function api(url, signal) {
@@ -292,7 +296,7 @@ function card(it) {
       div.style.aspectRatio = im.naturalWidth + "/" + im.naturalHeight;
   });
   im.addEventListener("error", () => div.classList.add("err"));
-  im.src = `/thumb/${encodeURIComponent(it.name)}?w=400`;
+  im.src = `/thumb/${encodeURIComponent(it.name)}?w=${thumbW}`;
   im.alt = it.name;
   div.appendChild(im);
   if (it.kind === "video") div.appendChild(chip("▶", "play"));
@@ -366,7 +370,7 @@ const thumbUnload = new IntersectionObserver((entries) => {
       im.removeAttribute("src");
     }
   }
-}, { rootMargin: "1500px" });
+}, { rootMargin: matchMedia("(pointer: coarse)").matches ? "800px" : "1500px" });
 
 async function loadMore() {
   if (state.loading) return;
@@ -376,7 +380,7 @@ async function loadMore() {
     abortCtl?.abort();
     abortCtl = new AbortController();
     const p = new URLSearchParams({
-      offset: state.offset, limit: 60,
+      offset: state.offset, limit: pageLimit,
       category: state.tab, sort: state.random ? "random" : state.sort,
       tags: state.tags.join(","),
     });
@@ -476,10 +480,20 @@ function closeLightbox() {
   resetZoom();
   unlockScroll();
 }
+// variante de exibição no celular: thumb 1600px (fração do original);
+// gif mantém o original (thumb seria JPEG estático, mataria a animação)
+// ponytail: originais >1600px perdem detalhe no zoom 4x — trocar p/ /media no zoom se importar
+function displaySrc(it) {
+  return it.kind === "image" && it.mime !== "image/gif"
+    ? `/thumb/${encodeURIComponent(it.name)}?w=1600`
+    : `/media/${encodeURIComponent(it.name)}`;
+}
 function renderLightbox() {
   const it = state.items[lbIdx];
   if (!it) return closeLightbox();
   stopBoost();
+  const prev = lbContent.querySelector("video");
+  if (prev) { prev.pause(); prev.removeAttribute("src"); prev.load(); } // libera a banda do vídeo anterior
   lb.classList.remove("chrome-hidden");
   lbCounter.textContent = `${lbIdx + 1} / ${state.total ?? state.items.length}`;
   lbFilesize.textContent = fmtSize(it.size || 0);
@@ -490,7 +504,9 @@ function renderLightbox() {
   let el;
   if (it.kind === "video") {
     el = document.createElement("video");
-    el.controls = true; el.autoplay = true; el.playsInline = true; el.src = src;
+    el.controls = true; el.autoplay = true; el.playsInline = true; el.preload = "metadata";
+    el.poster = `/thumb/${encodeURIComponent(it.name)}?w=400`; // thumb já em cache: pintura instantânea
+    el.src = src;
     el.loop = true; // reprodução em loop infinito por padrão
     el.controlsList = "nodownload";
     el.disablePictureInPicture = true;
@@ -499,7 +515,7 @@ function renderLightbox() {
     wireVideoGestures(el);
   } else if (it.kind === "image") {
     el = document.createElement("img");
-    el.src = src; el.alt = it.name;
+    el.src = displaySrc(it); el.alt = it.name;
     el.draggable = false;
     el.setAttribute("selectstart", "return false");
     zimg = el;
@@ -511,6 +527,9 @@ function renderLightbox() {
   lbContent.appendChild(el);
   lbFavBtn.classList.toggle("active", !!it.fav);
   renderLbTags();
+  // pré-carrega a próxima imagem estática (swipe sem tela preta no 4G)
+  const nx = state.items[lbIdx + 1];
+  if (nx && nx.kind === "image" && nx.mime !== "image/gif") { const p = new Image(); p.src = displaySrc(nx); }
 }
 
 // ---- tags no lightbox: atrás de toggle, customs com × para remover --------
@@ -889,7 +908,8 @@ new IntersectionObserver((entries) => {
 }
 reset();
 refreshStats();
-setInterval(refreshStats, 15000);
+setInterval(() => { if (!document.hidden) refreshStats(); }, 60000); // 15s acordava o rádio do celular à toa
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshStats(); });
 
 // altura do header vira var CSS (as abas sticky se posicionam por ela;
 // no mobile o header quebra em 2 linhas e a altura muda)

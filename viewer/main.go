@@ -70,8 +70,8 @@ type server struct {
 	probeLeft  int // videos na fila de analise de duracao
 	probeTotal int
 
-	tmu  sync.Mutex
-	busy map[string]bool // geracao de thumb em andamento
+	tmu      sync.Mutex
+	inflight map[string]*thumbCall // thumbs em geração (singleflight)
 }
 
 // noindex: exposto via dominio publico (cloudflared), nao deve ser indexado
@@ -126,16 +126,16 @@ func main() {
 		tags:     newTagStore(filepath.Join(thumbDir, "tags.json")),
 		fcache:   newFileCache(filepath.Join(thumbDir, "filecache.json")),
 		sem:      make(chan struct{}, 2),
-		busy:     map[string]bool{},
+		inflight: map[string]*thumbCall{},
 		fails:    map[string]*failRec{},
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", srv.requireAuth(srv.handleRoot))
-	mux.HandleFunc("GET /static/{file}", srv.requireAuth(srv.handleStatic))
-	mux.HandleFunc("GET /api/items", srv.requireAuth(srv.handleItems))
-	mux.HandleFunc("GET /api/stats", srv.requireAuth(srv.handleStats))
-	mux.HandleFunc("GET /api/tags", srv.requireAuth(srv.handleTags))
+	mux.HandleFunc("GET /{$}", srv.requireAuth(withGzip(srv.handleRoot)))
+	mux.HandleFunc("GET /static/{file}", srv.requireAuth(withGzip(srv.handleStatic)))
+	mux.HandleFunc("GET /api/items", srv.requireAuth(withGzip(srv.handleItems)))
+	mux.HandleFunc("GET /api/stats", srv.requireAuth(withGzip(srv.handleStats)))
+	mux.HandleFunc("GET /api/tags", srv.requireAuth(withGzip(srv.handleTags)))
 	mux.HandleFunc("POST /api/fav/{name}", srv.requireAuth(srv.handleFavToggle))
 	mux.HandleFunc("POST /api/ctag/{name}", srv.requireAuth(srv.handleCTag))
 	mux.HandleFunc("GET /api/download/status", srv.requireAuth(srv.handleDlStatus))
@@ -549,9 +549,9 @@ func (s *server) handleRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleStatic(w http.ResponseWriter, r *http.Request) {
-	// nunca cachear: mudanças no front precisam valer em reload simples,
-	// inclusive no celular (cache do Chromium foi a origem de bugs "fantasma")
-	w.Header().Set("Cache-Control", "no-store")
+	// URL carrega ?v=<hash do conteúdo>: imutável por construção, cache longo.
+	// public liberado: acesso só via VPN interna, sem cache compartilhado externo.
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	switch r.PathValue("file") {
 	case "app.js":
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")

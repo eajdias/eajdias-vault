@@ -23,6 +23,12 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
+// thumbCall é uma geração de thumb em andamento: esperas pela mesma chave
+// bloqueiam no canal em vez de polling (singleflight manual, sem dependência).
+type thumbCall struct {
+	done chan struct{}
+}
+
 func decodableImage(mime string) bool {
 	switch mime {
 	case "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp":
@@ -47,8 +53,8 @@ func (s *server) handleThumb(w http.ResponseWriter, r *http.Request) {
 	if width < 64 {
 		width = 400
 	}
-	if width > 800 {
-		width = 800
+	if width > 1600 {
+		width = 1600 // variante de exibição do lightbox no celular
 	}
 
 	key := thumbKey(name, width)
@@ -60,22 +66,19 @@ func (s *server) handleThumb(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.tmu.Lock()
-	busy := s.busy[key]
-	s.busy[key] = true
-	s.tmu.Unlock()
-
-	if busy {
-		// outra requisicao esta gerando a mesma thumb: aguarda e serve quando surgir
-		for i := 0; i < 100; i++ {
-			time.Sleep(200 * time.Millisecond)
-			if data, err := os.ReadFile(dst); err == nil {
-				writeThumb(w, data)
-				return
-			}
+	if c, ok := s.inflight[key]; ok {
+		s.tmu.Unlock()
+		<-c.done // outra requisição está gerando: serve quando surgir
+		if data, err := os.ReadFile(dst); err == nil {
+			writeThumb(w, data)
+			return
 		}
 		http.NotFound(w, r)
 		return
 	}
+	c := &thumbCall{done: make(chan struct{})}
+	s.inflight[key] = c
+	s.tmu.Unlock()
 
 	// fila global: no máximo 2 gerações simultâneas (ffmpeg/decode pesam CPU
 	// e RAM do host; requisições excedentes ficam enfileiradas no canal)
@@ -84,8 +87,9 @@ func (s *server) handleThumb(w http.ResponseWriter, r *http.Request) {
 	<-s.sem
 
 	s.tmu.Lock()
-	delete(s.busy, key)
+	delete(s.inflight, key)
 	s.tmu.Unlock()
+	close(c.done)
 
 	if err != nil {
 		log.Printf("[thumb] %s: %v", name, err)
