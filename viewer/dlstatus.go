@@ -33,6 +33,7 @@ type shellStatus struct {
 	StartedAt  int64  `json:"started_at"`
 	UpdatedAt  int64  `json:"updated_at"`
 	LastMoveAt int64  `json:"last_move_at"`
+	Mode       string `json:"mode,omitempty"`
 }
 
 func readShellStatus(mediaDir string) shellStatus {
@@ -101,6 +102,7 @@ func (s *server) currentDLStatus() dlStatus {
 	if st.Active {
 		if sh.Running == 1 {
 			st.Phase = sh.Phase
+			st.SyncMode = sh.Mode
 			if st.SyncMode == "" {
 				st.SyncMode = "full" // default do entrypoint
 			}

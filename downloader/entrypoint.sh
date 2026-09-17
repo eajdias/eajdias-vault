@@ -22,6 +22,7 @@ FAV_TAG="${FAV_TAG:-$DEFAULT_TAG}"
 MEDIA_DIR=/data/media
 STATUS_FILE="$MEDIA_DIR/.download-status.json"
 SAMPLE_INTERVAL="${SAMPLE_INTERVAL:-3}"
+MODE="${SYNC_MODE:-full}"
 
 mkdir -p "$MEDIA_DIR" /data/db
 
@@ -32,15 +33,16 @@ NOW() { date +%s; }
 write_status() {
 	# $1 running(0/1) $2 phase $3 rate_bps $4 files_total $5 bytes_total
 	# $6 files_added $7 bytes_added $8 started_at $9 last_move_at
-	printf '{"running":%s,"phase":"%s","rate_bps":%s,"files_total":%s,"bytes_total":%s,"files_added":%s,"bytes_added":%s,"started_at":%s,"updated_at":%s,"last_move_at":%s}\n' \
-		"$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$(NOW)" "${9:-0}" >"$STATUS_FILE.tmp" &&
+	printf '{"running":%s,"phase":"%s","rate_bps":%s,"files_total":%s,"bytes_total":%s,"files_added":%s,"bytes_added":%s,"started_at":%s,"updated_at":%s,"last_move_at":%s,"mode":"%s"}\n' \
+		"$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$(NOW)" "${9:-0}" "$MODE" >"$STATUS_FILE.tmp" &&
 		mv "$STATUS_FILE.tmp" "$STATUS_FILE"
 }
 
 sample() {
-	# devolve "<num_arquivos> <bytes>" (du em KB -> bytes)
+	# devolve "<num_arquivos> <bytes>" (du em KB -> bytes; sidecars *.json
+	# de tags nao contam como midias do vault)
 	du_out=$(du -sk "$MEDIA_DIR" 2>/dev/null | cut -f1)
-	echo "$(find "$MEDIA_DIR" -maxdepth 1 -type f ! -name '.*' 2>/dev/null | wc -l) $((${du_out:-0} * 1024))"
+	echo "$(find "$MEDIA_DIR" -maxdepth 1 -type f ! -name '.*' ! -name '*.json' 2>/dev/null | wc -l) $((${du_out:-0} * 1024))"
 }
 
 SAMPLER_PID=""
