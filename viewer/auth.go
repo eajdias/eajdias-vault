@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const cookieName = "sv_session"
+const cookieName = "zv_session"
 
 func newSecret(persistPath string) []byte {
 	// opcional: SESSION_SECRET em hex mantem sessoes validas entre restarts
@@ -78,7 +78,7 @@ func (s *server) checkPassword(pw string) bool {
 const loginHTML = `<!doctype html>
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>sank-vault · login</title>
+<title>zub-vault · login</title>
 <style>
  body{background:#0e0f13;color:#e6e6ea;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
  .box{background:#171922;padding:2rem 2.5rem;border-radius:14px;width:min(320px,90vw);box-shadow:0 10px 40px rgba(0,0,0,.6)}
@@ -89,7 +89,7 @@ const loginHTML = `<!doctype html>
  button:hover{filter:brightness(1.15)}
  .erro{color:#ff6b81;font-size:.85rem;margin:.6rem 0 0;text-align:center}
 </style></head>
-<body><form class="box" method="post"><h1>sank<b>&middot;vault</b></h1>
+<body><form class="box" method="post"><h1>zub<b>&middot;vault</b></h1>
 <input type="password" name="password" placeholder="senha" autofocus>%s
 <button>entrar</button></form></body></html>
 `
@@ -100,7 +100,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		ip := clientIP(r)
 		if !s.loginAllowed(ip) {
-			log.Printf("[sank-vault] login bloqueado (rate limit) para %s", ip)
+			log.Printf("[zub-vault] login bloqueado (rate limit) para %s", ip)
 			w.Header().Set("Retry-After", "600")
 			http.Error(w, "muitas tentativas — tente novamente em alguns minutos", http.StatusTooManyRequests)
 			return
@@ -112,7 +112,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.loginFail(ip)
-		log.Printf("[sank-vault] tentativa de login invalida de %s", ip)
+		log.Printf("[zub-vault] tentativa de login invalida de %s", ip)
 		msg = `<p class="erro">senha incorreta</p>`
 		status = http.StatusUnauthorized
 	}

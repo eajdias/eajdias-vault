@@ -1,4 +1,4 @@
-name: sank-vault
+name: zub-vault
 
 services:
   # Baixa os favoritos do Sankaku. Uso manual:
@@ -15,8 +15,8 @@ services:
       GDL_EXTRA_ARGS: ${GDL_EXTRA_ARGS:-}
       SAMPLE_INTERVAL: ${SAMPLE_INTERVAL:-15} # heartbeat: du+find a cada N s (3s sua IO em vault grande)
     volumes:
-      - vault_media:/data/media
-      - vault_db:/data/db
+      - ${MEDIA_BIND:-vault_media}:/data/media
+      - ${DB_BIND:-vault_db}:/data/db
     restart: "no"
 
   # Web UI local com login: http://127.0.0.1:8090
@@ -27,13 +27,13 @@ services:
     ports:
       - "127.0.0.1:8090:8080"
     environment:
-      VIEWER_PASSWORD: ${VIEWER_PASSWORD:-Sankvault@123}
+      VIEWER_PASSWORD: ${VIEWER_PASSWORD:-Zubvault@123}
       MEDIA_DIR: /data/media
       THUMB_DIR: /data/thumbs
       ADDR: ":8080"
     volumes:
-      - vault_media:/data/media:ro
-      - vault_thumbs:/data/thumbs
+      - ${MEDIA_BIND:-vault_media}:/data/media:ro
+      - ${THUMBS_BIND:-vault_thumbs}:/data/thumbs
     restart: unless-stopped
 
   # Sync incremental diario automatico (04:00 por padrao; mude com
@@ -50,11 +50,23 @@ services:
       AUTOSYNC_HOUR: ${AUTOSYNC_HOUR:-04:00}
       SAMPLE_INTERVAL: ${SAMPLE_INTERVAL:-15} # idem downloader (autosync usa o mesmo entrypoint)
     volumes:
-      - vault_media:/data/media
-      - vault_db:/data/db
+      - ${MEDIA_BIND:-vault_media}:/data/media
+      - ${DB_BIND:-vault_db}:/data/db
     restart: unless-stopped
 
+# Layout homelab: repo em <disco>/docker/zub-vault + .env com
+#   MEDIA_BIND=<disco>/docker/zub-vault/media
+#   THUMBS_BIND=<disco>/docker/zub-vault/thumbs
+#   DB_BIND=<disco>/docker/zub-vault/db
+# (ver README "Homelab e opacidade"). Sem essas vars, valem os volumes
+# nomeados abaixo — comportamento atual, nada muda.
+#
+# Os `name:` preservam os volumes criados na era `sank-vault` (antes do
+# rename): sem eles o compose criaria volumes vazios e o vault "sumiria".
 volumes:
   vault_media:   # midias sem extensao (dentro do disco do Docker/WSL2)
+    name: sank-vault_vault_media
   vault_db:      # archive.sqlite -> deduplicacao entre execucoes
+    name: sank-vault_vault_db
   vault_thumbs:  # cache de miniaturas do viewer
+    name: sank-vault_vault_thumbs

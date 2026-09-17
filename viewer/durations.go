@@ -81,7 +81,7 @@ func (ds *durationStore) save() {
 	}
 	tmp := ds.path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		log.Printf("[sank-vault] meta.json: %v", err)
+		log.Printf("[zub-vault] meta.json: %v", err)
 		return
 	}
 	_ = os.Rename(tmp, ds.path)
@@ -159,7 +159,7 @@ func (s *server) probePass() bool {
 	if len(targets) == 0 {
 		return false
 	}
-	log.Printf("[sank-vault] analisando duração de %d vídeos...", len(targets))
+	log.Printf("[zub-vault] analisando duração de %d vídeos...", len(targets))
 
 	sem := make(chan struct{}, 2)
 	var wg sync.WaitGroup
@@ -187,6 +187,6 @@ func (s *server) probePass() bool {
 	}
 	wg.Wait()
 	s.durs.save()
-	log.Printf("[sank-vault] análise de duração concluída")
+	log.Printf("[zub-vault] análise de duração concluída")
 	return true
 }

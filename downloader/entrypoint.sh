@@ -1,5 +1,5 @@
 #!/bin/sh
-# sank-vault :: downloader
+# zub-vault :: downloader
 # Baixa os favoritos do Sankaku com deduplicacao por SQLite e remove
 # a extensao dos arquivos logo apos cada download (via postprocessor).
 #
@@ -139,8 +139,8 @@ fi
 
 URL="https://beta.sankakucomplex.com/?tags=fav:${FAV_TAG}"
 
-echo "[sank-vault] user=${SANKAKU_USER} tag=fav:${FAV_TAG} modo=${SYNC_MODE:-full}"
-echo "[sank-vault] destino=${MEDIA_DIR} archive=/data/db/archive.sqlite"
+echo "[zub-vault] user=${SANKAKU_USER} tag=fav:${FAV_TAG} modo=${SYNC_MODE:-full}"
+echo "[zub-vault] destino=${MEDIA_DIR} archive=/data/db/archive.sqlite"
 
 start_sampler
 

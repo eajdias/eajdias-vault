@@ -1,4 +1,4 @@
-module sankvault
+module zubvault
 
 go 1.25.0
 

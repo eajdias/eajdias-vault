@@ -1,8 +1,9 @@
-# sank-vault
+# zub-vault
 
 Baixa os favoritos do Sankaku via [gallery-dl](https://github.com/mikf/gallery-dl) em Docker,
-**sem duplicatas** entre execuções e com as mídias **armazenadas sem extensão** dentro de um
-volume nomeado (invisível para curiosos no host). Visualização por Web UI local com login.
+**sem duplicatas** entre execuções e com as mídias **armazenadas sem extensão**.
+Visualização por Web UI local com login. Todo o conteúdo é +18: ver
+"Homelab e opacidade" antes de expor qualquer pasta.
 
 ## Uso
 
@@ -12,7 +13,7 @@ docker compose run --rm downloader
 
 # 2) abrir a galeria
 docker compose up -d viewer
-# http://127.0.0.1:8090  — senha padrão: Sankvault@123
+# http://127.0.0.1:8090  — senha padrão: Zubvault@123
 ```
 
 ## Como funciona
@@ -23,7 +24,7 @@ docker compose up -d viewer
 | `archive.sqlite` | em `vault_db`: registra o que já foi baixado → **re-execuções não duplicam nada**; falhas não são gravadas (retentam depois) |
 | `strip-ext.sh` | postprocessor que renomeia cada arquivo removendo a extensão logo após o download |
 | `viewer` | Go + ffmpeg; detecta o tipo real por *magic bytes*, faz streaming com seek (`Range`) e gera thumbnails |
-| volumes nomeados | arquivos vivem dentro do disco do Docker Desktop (WSL2), não em pastas do host |
+| volumes | nomeados por padrão; com `*_BIND` no `.env` viram pastas do host (ver "Homelab e opacidade") |
 
 ### Formatos suportados (sem extensão, via magic bytes)
 
@@ -141,13 +142,64 @@ docker compose stop viewer
 docker run --rm -v sank-vault_vault_thumbs:/src -v ~/backup:/dst alpine cp -r /src "/dst/zub-vault-thumbs-$(date +%F)"
 docker compose start viewer
 ```
+(com bind mounts, copie a pasta `thumbs/` do host com o viewer parado.)
+
+### Homelab e opacidade (+18)
+
+Layout alvo no disco do homelab (backup simples, sobrevive a troca de SO):
+
+```
+<disco>/docker/zub-vault/   <- este repo
+  media/ thumbs/ db/        <- dados (criados no 1º up com bind)
+```
+
+`.env` (não versionado):
+
+```bash
+MEDIA_BIND=<disco>/docker/zub-vault/media
+THUMBS_BIND=<disco>/docker/zub-vault/thumbs
+DB_BIND=<disco>/docker/zub-vault/db
+```
+
+Antes do 1º up com bind (uma vez; IDs reservados: grupo `vault` gid 2000,
+usuário do viewer uid 20000 — não use esses IDs para mais nada no host):
+
+```bash
+mkdir -p media thumbs db
+chgrp 2000 media thumbs db && chmod 2750 media && chmod 700 thumbs db
+```
+
+No up seguinte o entrypoint converge o resto (arquivos 640 `root:vault`,
+dirs com setgid). Migração a partir dos volumes nomeados:
+
+```bash
+docker compose stop viewer
+# copia o CONTEÚDO de cada volume p/ a pasta irmã (rode 1x por volume):
+docker run --rm -v sank-vault_vault_media:/src -v <disco>/docker/zub-vault/media:/dst alpine sh -c 'cp -a /src/. /dst/'
+docker run --rm -v sank-vault_vault_db:/src -v <disco>/docker/zub-vault/db:/dst alpine sh -c 'cp -a /src/. /dst/'
+docker run --rm -v sank-vault_vault_thumbs:/src -v <disco>/docker/zub-vault/thumbs:/dst alpine sh -c 'cp -a /src/. /dst/'
+docker compose up -d   # entrypoint ajusta dono/grupo/perms sozinho
+```
+
+O que a opacidade cobre e o que não cobre:
+
+- ✅ Cobre: olhada casual no gerenciador de arquivos (sem extensão, nomes
+  `id_md5`, dir oculta p/ sidecars, 640/750 fora do seu usuário → sem
+  thumbnail nem preview), indexadores (Plex/Jellyfin/Android pulam sem
+  extensão + `.nomedia`), backups levados para outro lugar (continuam
+  ilegíveis sem o uid/gid — mas ver abaixo).
+- ❌ Não cobre: acesso **determinado** (root/sudo no host abre tudo) nem
+  compartilhamento com squash/all-access (SMB com `force user` ou guest
+  ignora perms do Linux — o desktop enxerga tudo). Para esses casos a
+  resposta é cifra em repouso (ex.: gocryptfs com a chave **fora** da árvore
+  compartilhada): blobs cifrados no backup valem em qualquer lugar.
 
 ## Variáveis (opcionais — padrões hardcoded)
 
 `SANKAKU_USER`, `SANKAKU_PASS`, `FAV_TAG` (default `zubirous`), `SYNC_MODE`
 (`full` é o padrão: varre a lista inteira até o fim, pulando o que já está no
 archive; `incremental` para cedo ao achar mídia já baixada — sync rápido),
-`VIEWER_PASSWORD` (default `Sankvault@123`), `AUTOSYNC_HOUR` (hora do sync automático, default `04:00`).
+`VIEWER_PASSWORD` (default `Zubvault@123`), `AUTOSYNC_HOUR` (hora do sync automático, default `04:00`).
 
 ## Comandos úteis
 

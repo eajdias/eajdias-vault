@@ -130,7 +130,7 @@ func main() {
 	srv := &server{
 		mediaDir: mediaDir,
 		thumbDir: thumbDir,
-		password: env("VIEWER_PASSWORD", "Sankvault@123"),
+		password: env("VIEWER_PASSWORD", "Zubvault@123"),
 		secret:   newSecret(filepath.Join(thumbDir, ".session_secret")),
 		durs:     newDurationStore(filepath.Join(thumbDir, "meta.json")),
 		favs:     newFavStore(filepath.Join(thumbDir, "favorites.json")),
@@ -157,7 +157,7 @@ func main() {
 	mux.HandleFunc("POST /logout", srv.handleLogout)
 
 	addr := env("ADDR", ":8080")
-	log.Printf("[sank-vault] viewer ouvindo em %s (midia=%s)", addr, mediaDir)
+	log.Printf("[zub-vault] viewer ouvindo em %s (midia=%s)", addr, mediaDir)
 
 	srv.startDurationProber()
 	log.Fatal(http.ListenAndServe(addr, noindex(mux)))

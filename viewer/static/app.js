@@ -87,7 +87,7 @@ function applyRandomUI() {
 
 function setRandom(on) {
   state.random = on;
-  localStorage.setItem("sv-random", on ? "1" : "0");
+  localStorage.setItem("zv-random", on ? "1" : "0");
   state.seed = null; // novo sorteio
   applyRandomUI();
   syncUrl();
@@ -122,7 +122,7 @@ function setTab(tab) {
 const state = {
   offset: 0, total: null, tab: "all", sort: "recent", loading: false, items: [],
   tags: [],
-  random: localStorage.getItem("sv-random") !== "0", // ON por padrão
+  random: localStorage.getItem("zv-random") !== "0", // ON por padrão
   seed: null,
 };
 // rede celular: thumbs menores e páginas curtas. tier lento = saveData, 2g ou
