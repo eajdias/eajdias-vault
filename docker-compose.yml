@@ -24,8 +24,10 @@ services:
   # status via heartbeat; início e parada acontecem pelo terminal ou autosync.
   viewer:
     build: ./viewer
+    # todas as interfaces, como os demais servicos da casa (0.0.0.0): acesso
+    # via tailnet http://<ip-tailnet>:8090 + LAN; o portao e o login com senha
     ports:
-      - "127.0.0.1:8090:8080"
+      - "8090:8080"
     environment:
       VIEWER_PASSWORD: ${VIEWER_PASSWORD:-Zubvault@123}
       MEDIA_DIR: /data/media

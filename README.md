@@ -13,7 +13,7 @@ docker compose run --rm downloader
 
 # 2) abrir a galeria
 docker compose up -d viewer
-# http://127.0.0.1:8090  — senha padrão: Zubvault@123
+# http://127.0.0.1:8090 (ou http://<ip-tailnet>:8090 no celular) — senha padrão: Zubvault@123
 ```
 
 ## Como funciona
