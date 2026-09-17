@@ -60,7 +60,7 @@ const SORTS = {
 const DEFAULT_SORT = { all: "recent", fav: "recent", image: "size_asc", gif: "size_asc", video: "duration_asc" };
 
 function sortFor(tab) {
-  const saved = localStorage.getItem(`sv-sort-${tab}`);
+  const saved = localStorage.getItem(`zv-sort-${tab}`);
   return SORTS[tab].some(([k]) => k === saved) ? saved : DEFAULT_SORT[tab];
 }
 
@@ -541,7 +541,7 @@ const lbTagsToggle = document.getElementById("lb-tags-toggle");
 const lbTagEnv = document.getElementById("lb-tagenv");
 const lbTagList = document.getElementById("lb-taglist");
 const lbCustom = document.getElementById("lb-custom");
-let lbTagsOpen = localStorage.getItem("sv-show-tags") === "1";
+let lbTagsOpen = localStorage.getItem("zv-show-tags") === "1";
 
 function syncTagsToggle(n) {
   lbTagsToggle.textContent = `🏷 ${n ?? 0}`;
@@ -550,7 +550,7 @@ function syncTagsToggle(n) {
 }
 lbTagsToggle.addEventListener("click", () => {
   lbTagsOpen = !lbTagsOpen;
-  localStorage.setItem("sv-show-tags", lbTagsOpen ? "1" : "0");
+  localStorage.setItem("zv-show-tags", lbTagsOpen ? "1" : "0");
   syncTagsToggle((state.items[lbIdx]?.tags?.length || 0) + (state.items[lbIdx]?.custom?.length || 0));
 });
 
@@ -787,7 +787,7 @@ function unlockScroll() {
 document.querySelectorAll(".tab").forEach((b) => { b.addEventListener("click", () => setTab(b.dataset.cat)); });
 sortSel.addEventListener("change", () => {
   state.sort = sortSel.value;
-  localStorage.setItem(`sv-sort-${state.tab}`, state.sort);
+  localStorage.setItem(`zv-sort-${state.tab}`, state.sort);
   syncUrl();
   reset();
 });
@@ -848,10 +848,23 @@ function renderDl(st) {
   if (st.age_s !== undefined && st.updated_at) html += dlRow("Última atividade", st.age_s < 90 ? `há ${st.age_s}s` : new Date(st.updated_at * 1000).toLocaleTimeString());
   dlBody.innerHTML = html;
 
+  const cmdEl = document.getElementById("dl-cmd");
+  if (st.cmd && st.cmd_age_s < 600) {
+    const m = {
+      accepted: ["comando aceito — iniciando…", "ok"],
+      busy: ["ocupado: " + (st.cmd.detail || "sync em andamento"), "warn"],
+      done: ["sync concluído ✓ (" + (st.cmd.detail || "") + ")", "ok"],
+      error: ["falha: " + (st.cmd.detail || ""), "warn"],
+      stopped: ["sync parado ✓", "ok"],
+      nothing: ["nada a parar", ""],
+    }[st.cmd.state];
+    cmdEl.innerHTML = m ? `<span class="${m[1]}">${m[0]}</span>` : "";
+  } else cmdEl.textContent = "";
+
   if (st.stuck) {
-    dlHint.textContent = "nenhum progresso há mais de 3 min — pare pelo terminal (Ctrl+C) e inicie de novo";
+    dlHint.textContent = "nenhum progresso há mais de 3 min — aperte Parar e inicie de novo";
   } else {
-    dlHint.textContent = "início e parada pelo terminal: docker compose run --rm downloader";
+    dlHint.textContent = "incremental pula baixados e para após 5 seguidos · diário às 04:00";
   }
 }
 
@@ -861,6 +874,54 @@ async function refreshDl() {
     if (r.ok) renderDl(await r.json());
   } catch { /* silencioso */ }
 }
+
+async function dlPost(path, body) {
+  const cmdEl = document.getElementById("dl-cmd");
+  try {
+    const r = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : "{}",
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 202) cmdEl.innerHTML = `<span class="ok">pedido enviado…</span>`;
+    else if (r.status === 409) cmdEl.innerHTML = `<span class="warn">já há comando pendente</span>`;
+    else if (r.status === 503) cmdEl.innerHTML = `<span class="warn">executor parado (suba o autosync)</span>`;
+    else cmdEl.innerHTML = `<span class="warn">${d.error || ("falha " + r.status)}</span>`;
+  } catch {
+    cmdEl.innerHTML = `<span class="warn">sem resposta</span>`;
+  }
+  refreshDl();
+}
+
+document.getElementById("dl-start").addEventListener("click", (e) => {
+  e.currentTarget.disabled = true;
+  dlPost("/api/download/start", { mode: document.getElementById("dl-mode").value })
+    .finally(() => { e.currentTarget.disabled = false; });
+});
+document.getElementById("dl-stop").addEventListener("click", (e) => {
+  e.currentTarget.disabled = true;
+  dlPost("/api/download/stop").finally(() => { e.currentTarget.disabled = false; });
+});
+document.getElementById("dl-verify").addEventListener("click", async () => {
+  const out = document.getElementById("dl-verify-out");
+  out.textContent = "verificando…";
+  try {
+    const d = await api("/api/download/verify");
+    let html = "";
+    html += dlRow("Mídias", d.media_files);
+    html += dlRow("Sidecars", d.sidecars);
+    html += dlRow("Sem sidecar", d.media_sem_sidecar_total
+      ? `${d.media_sem_sidecar_total} (ex.: ${d.media_sem_sidecar.slice(0, 3).join(", ")})` : "0 ✓");
+    html += dlRow("Sidecars órfãos", d.sidecars_orfaos_total || "0 ✓");
+    html += dlRow("Parciais (.part)", d.partials || "0 ✓");
+    html += dlRow("Disco livre", fmtSize(d.disk_free_bytes));
+    if (d.last_at) html += dlRow("Último sync", `${d.last_phase} · ${new Date(d.last_at * 1000).toLocaleString()}`);
+    out.innerHTML = html;
+  } catch {
+    out.textContent = "falha na verificação";
+  }
+});
 
 function openDl() {
   dlpanel.hidden = false;
@@ -891,7 +952,7 @@ new IntersectionObserver((entries) => {
   state.sort = sortFor(tab);
   if (SORTS[tab].some(([k]) => k === p.get("sort"))) {
     state.sort = p.get("sort");
-    localStorage.setItem(`sv-sort-${tab}`, state.sort);
+    localStorage.setItem(`zv-sort-${tab}`, state.sort);
   }
   // modo aleatório: ?rand=1 força ON, rand=0 força OFF; sem parâmetro,
   // segue a preferência salva (padrão ON). Seed restaura a mesma ordem.

@@ -34,6 +34,7 @@ services:
     volumes:
       - ${MEDIA_BIND:-vault_media}:/data/media:ro
       - ${THUMBS_BIND:-vault_thumbs}:/data/thumbs
+      - ${DB_BIND:-vault_db}:/data/db
     restart: unless-stopped
 
   # Sync incremental diario automatico (04:00 por padrao; mude com

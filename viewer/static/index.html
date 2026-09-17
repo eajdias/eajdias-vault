@@ -80,6 +80,17 @@
       <button type="button" id="dl-close" class="modal-close" title="Fechar" aria-label="Fechar">&times;</button>
     </div>
     <div id="dl-body"></div>
+    <div id="dl-ctl">
+      <select id="dl-mode" aria-label="Modo do sync">
+        <option value="incremental">sync rápido</option>
+        <option value="full">completo</option>
+      </select>
+      <button type="button" id="dl-start">Iniciar</button>
+      <button type="button" id="dl-stop">Parar</button>
+      <button type="button" id="dl-verify">Verificar</button>
+    </div>
+    <div id="dl-cmd"></div>
+    <div id="dl-verify-out"></div>
     <p id="dl-hint"></p>
   </div>
 </div>

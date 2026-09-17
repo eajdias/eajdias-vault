@@ -31,6 +31,14 @@ MODE="${SYNC_MODE:-full}"
 
 mkdir -p "$MEDIA_DIR" /data/db
 
+# controle via UI (sem socket docker): a UI escreve cmd/stop, o autosync e
+# este sampler consomem. dir 2770 root:vault — o viewer (membro do grupo)
+# escreve comandos, nunca executa nada.
+CTRL_DIR="/data/db/.uictrl"
+mkdir -p "$CTRL_DIR"
+chgrp 2000 "$CTRL_DIR" 2>/dev/null
+chmod 2770 "$CTRL_DIR" 2>/dev/null
+
 # sidecars de tags moram em .meta/ (oculto): recolhe legados da raiz e
 # sinaliza indexadores de midia (Android/Plex) para ignorarem o vault.
 # converge grupo+perms (acervo antigo, one-shots manuais sem umask): no estado
@@ -95,9 +103,37 @@ EOF
 			write_status 1 baixando "$rate" "$n" "$b" "$sess_n" "$sess_b" "$started" "$move"
 			prev_n=$n
 			prev_b=$b
+			check_stop
 		done
 	) &
 	SAMPLER_PID=$!
+}
+
+# check_stop consome o pedido de parada da UI (um por tick do sampler):
+# mata o gallery-dl com TERM (finalizacao graciosa via traps) e confirma
+# em ack.json. Guarda /proc evita matar pid reciclado.
+check_stop() {
+	[ -f "$CTRL_DIR/stop" ] || return 0
+	id=$(cat "$CTRL_DIR/stop" 2>/dev/null)
+	rm -f "$CTRL_DIR/stop"
+	pid=$(cat "$CTRL_DIR/gdl.pid" 2>/dev/null)
+	state="nothing"
+	if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+		case "$(tr '\0' ' ' </proc/$pid/cmdline 2>/dev/null)" in
+		*gallery-dl*)
+			kill -TERM "$pid" 2>/dev/null
+			state="stopped"
+			touch "$CTRL_DIR/stopped_by_ui" # flag p/ finish_status fechar o start com "stopped"
+			;;
+		esac
+	fi
+	if [ "$state" = "nothing" ]; then
+		detail=',"detail":"sem sync ativo"'
+	else
+		detail=""
+	fi
+	printf '{"id":%s,"state":"%s"%s,"at":%s}\n' "${id:-0}" "$state" "$detail" "$(NOW)" >"$CTRL_DIR/ack.tmp" &&
+		mv "$CTRL_DIR/ack.tmp" "$CTRL_DIR/ack.json"
 }
 
 stop_sampler() {
@@ -109,6 +145,15 @@ stop_sampler() {
 finish_status() {
 	# $1 = codigo de saida do gallery-dl
 	stop_sampler
+	rm -f "$CTRL_DIR/gdl.pid"
+	# parada via UI: fecha o comando start como "stopped" (em vez de erro
+	# rc=143); o autosync ve o marker e nao sobrescreve
+	if [ -f "$CTRL_DIR/stopped_by_ui" ] && [ -f "$CTRL_DIR/run.id" ]; then
+		id=$(cat "$CTRL_DIR/run.id" 2>/dev/null)
+		rm -f "$CTRL_DIR/run.id"
+		printf '{"id":%s,"state":"stopped","at":%s}\n' "${id:-0}" "$(NOW)" >"$CTRL_DIR/ack.tmp" &&
+			mv "$CTRL_DIR/ack.tmp" "$CTRL_DIR/ack.json"
+	fi
 	read -r n b <<EOF
 $(sample)
 EOF
@@ -132,9 +177,10 @@ trap 'rc=$?; finish_status "$rc"' EXIT
 ARGS="--download-archive /data/db/archive.sqlite --config /app/gallery-dl.conf"
 
 # full       : varre a lista inteira ate o fim (archive evita re-download)
-# incremental: para cedo ao encontrar midia ja baixada (sync rapido)
+# incremental: pula o ja baixado e para apos 5 skips SEGUIDOS (fim real da
+#              lista tambem para sozinho com rc=0)
 if [ "${SYNC_MODE:-full}" = "incremental" ]; then
-	ARGS="$ARGS -o skip=abort"
+	ARGS="$ARGS -o skip=abort:5"
 fi
 
 URL="https://beta.sankakucomplex.com/?tags=fav:${FAV_TAG}"
@@ -157,6 +203,7 @@ trap 'rc=$?; finish_status "$rc"' EXIT
 # shellcheck disable=SC2086
 gallery-dl $ARGS ${GDL_EXTRA_ARGS:-} -u "$SANKAKU_USER" -p "$SANKAKU_PASS" "$URL" &
 GDL_PID=$!
+echo "$GDL_PID" >"$CTRL_DIR/gdl.pid"
 wait "$GDL_PID"
 rc=$?
 exit "$rc"

@@ -49,6 +49,7 @@ type Item struct {
 type server struct {
 	mediaDir string
 	thumbDir string
+	dbDir    string // /data/db: heartbeat do autosync + protocolo de controle (.uictrl)
 	password string
 	secret   []byte
 
@@ -115,6 +116,7 @@ func main() {
 
 	mediaDir := env("MEDIA_DIR", "/data/media")
 	thumbDir := env("THUMB_DIR", "/data/thumbs")
+	dbDir := env("DB_DIR", "/data/db")
 
 	if err := os.MkdirAll(mediaDir, 0o755); err != nil {
 		log.Fatal(err)
@@ -130,6 +132,7 @@ func main() {
 	srv := &server{
 		mediaDir: mediaDir,
 		thumbDir: thumbDir,
+		dbDir:    dbDir,
 		password: env("VIEWER_PASSWORD", "Zubvault@123"),
 		secret:   newSecret(filepath.Join(thumbDir, ".session_secret")),
 		durs:     newDurationStore(filepath.Join(thumbDir, "meta.json")),
@@ -150,6 +153,9 @@ func main() {
 	mux.HandleFunc("POST /api/fav/{name}", srv.requireAuth(srv.handleFavToggle))
 	mux.HandleFunc("POST /api/ctag/{name}", srv.requireAuth(srv.handleCTag))
 	mux.HandleFunc("GET /api/download/status", srv.requireAuth(srv.handleDlStatus))
+	mux.HandleFunc("POST /api/download/start", srv.requireAuth(srv.handleDlStart))
+	mux.HandleFunc("POST /api/download/stop", srv.requireAuth(srv.handleDlStop))
+	mux.HandleFunc("GET /api/download/verify", srv.requireAuth(srv.handleDlVerify))
 	mux.HandleFunc("GET /media/{name}", srv.requireAuth(srv.handleMedia))
 	mux.HandleFunc("GET /thumb/{name}", srv.requireAuth(srv.handleThumb))
 	mux.HandleFunc("GET /login", srv.handleLogin)

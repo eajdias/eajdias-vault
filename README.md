@@ -111,14 +111,16 @@ teto: rewrite integral de 12–18MB por edição @20k mídias). `favorites.json`
 `filecache.json` e `meta.json` continuam JSON — reavaliar (tabela no mesmo
 `.db`) se algum rewrite ficar perceptível.
 
-### Painel de download (engrenagem ⚙, somente leitura)
+### Painel de download (engrenagem ⚙)
 
-O botão ⚙ no topo mostra o status do downloader (fase, taxa, sessão, vault)
-lido do heartbeat em `/data/media/.download-status.json`. Downloads nunca
-são disparados pela UI: início e parada acontecem pelo terminal
-(`docker compose run --rm downloader`) ou pelo `autosync`.
-
-Endpoints: `GET /api/download/status`.
+Mostra fase, taxa, sessão e vault (heartbeat em
+`/data/media/.download-status.json`) + controles: **Iniciar** (full ou
+incremental), **Parar** e **Verificar** (saúde + consistência
+mídia↔sidecar). Sem socket docker: a UI escreve em `/data/db/.uictrl` e o
+**autosync executa** (precisa estar no ar — sem ele, Iniciar responde 503).
+Incremental pula baixados e para após **5 seguidos** (`skip=abort:5`) ou no
+fim da lista. Endpoints: `GET /api/download/status`, `POST
+/api/download/start|stop`, `GET /api/download/verify`.
 
 ### Sync automático diário
 

@@ -776,6 +776,30 @@ html, body { overscroll-behavior: none; }
   min-height: 1.1em;
 }
 
+#dl-ctl {
+  display: flex;
+  gap: 8px;
+  margin-top: 0.85rem;
+}
+#dl-ctl select, #dl-ctl button {
+  flex: 1;
+  padding: 0.55rem 0.4rem;
+  border-radius: 8px;
+  border: 1px solid #2c2f3d;
+  background: #0e0f13;
+  color: #e6e6ea;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+#dl-ctl button:hover { filter: brightness(1.25); }
+#dl-ctl button:disabled { opacity: 0.45; cursor: default; }
+#dl-start { background: #2c5cff; border-color: #2c5cff; }
+#dl-stop { background: #5c1f28; border-color: #7a2a34; }
+#dl-cmd, #dl-verify-out { font-size: 0.8rem; color: #9aa0b5; margin-top: 0.5rem; }
+#dl-cmd .ok { color: #7ee787; }
+#dl-cmd .warn { color: #f0b72f; }
+#dl-verify-out .dlrow span { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ==========================================================================
    RESPONSIVIDADE: DESKTOP FULL HD (1920x1080)
    ========================================================================== */
