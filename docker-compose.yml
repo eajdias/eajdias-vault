@@ -1,7 +1,7 @@
 name: zub-vault
 
 services:
-  # Baixa os favoritos do Sankaku. Uso manual:
+  # Downloads favorites via gallery-dl (Sankaku in the default config). Manual use:
   #   docker compose run --rm downloader
   # Amostra pequena (teste):
   #   docker compose run --rm -e GDL_EXTRA_ARGS="--range 1-3 --sleep-request 1" downloader

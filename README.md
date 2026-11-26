@@ -1,223 +1,231 @@
-# zub-vault
+# eajdias-vault
 
-Baixa os favoritos do Sankaku via [gallery-dl](https://github.com/mikf/gallery-dl) em Docker,
-**sem duplicatas** entre execuções e com as mídias **armazenadas sem extensão**.
-Visualização por Web UI local com login. Todo o conteúdo é +18: ver
-"Homelab e opacidade" antes de expor qualquer pasta.
+A local, privacy-first media vault: archive galleries from any
+[gallery-dl](https://github.com/mikf/gallery-dl)-supported source in Docker,
+**deduplicated** between runs, with media stored **without file extensions**.
+Browse everything through a lightweight Go web UI with login.
 
-## Uso
+Use cases: offline archive of artists and creators you follow, reference
+collections, tutorials, and any long-lived media library you want to keep out
+of platform feeds and thumbnails indexes.
+
+## Usage
 
 ```bash
-# 1) baixar favoritos (pode ser interrompido e retomado à vontade)
+# 1) download favorites (can be interrupted and resumed freely)
 docker compose run --rm downloader
 
-# 2) abrir a galeria
+# 2) open the gallery
 docker compose up -d viewer
-# http://127.0.0.1:8090 (ou http://<ip-tailnet>:8090 no celular) — senha padrão: Zubvault@123
+# http://127.0.0.1:8090 (or http://<ip-tailnet>:8090 on mobile) — default password: Zubvault@123
 ```
 
-## Como funciona
+## How it works
 
-| Peça | Papel |
+| Piece | Role |
 |---|---|
-| `downloader` | container oficial `gallery-dl`; grava cada mídia em `/data/media` (volume `vault_media`) |
-| `archive.sqlite` | em `vault_db`: registra o que já foi baixado → **re-execuções não duplicam nada**; falhas não são gravadas (retentam depois) |
-| `strip-ext.sh` | postprocessor que renomeia cada arquivo removendo a extensão logo após o download |
-| `viewer` | Go + ffmpeg; detecta o tipo real por *magic bytes*, faz streaming com seek (`Range`) e gera thumbnails |
-| volumes | nomeados por padrão; com `*_BIND` no `.env` viram pastas do host (ver "Homelab e opacidade") |
+| `downloader` | official `gallery-dl` container; writes each media to `/data/media` (volume `vault_media`) |
+| `archive.sqlite` | in `vault_db`: records what was already downloaded → **re-runs never duplicate anything**; failures are not recorded (retried later) |
+| `strip-ext.sh` | postprocessor that renames each file, removing the extension right after download |
+| `viewer` | Go + ffmpeg; detects the real type by *magic bytes*, streams with seek (`Range`) and generates thumbnails |
+| volumes | named by default; with `*_BIND` in `.env` they become host folders (see "Privacy design") |
 
-### Formatos suportados (sem extensão, via magic bytes)
+### Supported formats (extensionless, via magic bytes)
 
-| Categoria | Formatos |
+| Category | Formats |
 |---|---|
-| Imagem exibível | JPEG/JPG, PNG, GIF (1º frame), WebP, BMP, AVIF |
-| Vídeo exibível | MP4/M4V, WebM, MKV (`video/x-matroska`) |
-| Só download* | HEIC/HEIF, TIFF, AVI, WMV/ASF, FLV, Ogg |
+| Displayable image | JPEG/JPG, PNG, GIF (1st frame), WebP, BMP, AVIF |
+| Displayable video | MP4/M4V, WebM, MKV (`video/x-matroska`) |
+| Download-only* | HEIC/HEIF, TIFF, AVI, WMV/ASF, FLV, Ogg |
 
-\* o lightbox mostra o tipo e a mensagem "sem exibição no navegador" (visualização
-remota apenas — não há botão de download na interface); thumbnails são gerados por
-ffmpeg como fallback universal (inclui HEIC/AVIF/TIFF quando o build do
-ffmpeg os decodifica). Novos formatos caem em `application/octet-stream`
-e continuam listados/baixáveis.
+\* the lightbox shows the type and a "no browser preview" message (remote
+viewing only — there is no download button in the UI); thumbnails are generated
+by ffmpeg as a universal fallback (including HEIC/AVIF/TIFF when the ffmpeg
+build decodes them). New formats fall back to `application/octet-stream` and
+remain listed/downloadable.
 
-### Abas, ordenação e modo aleatório
+### Tabs, sorting and random mode
 
-A UI tem abas **Geral · ★ Favoritos · Imagens · GIFs · Vídeos** (com contadores)
-e um seletor de ordenação por aba. A duração dos vídeos é extraída com `ffprobe`
-em background (2 por vez) e cacheada em `/data/thumbs/meta.json` — enquanto a
-análise roda, vídeos sem duração ficam **sempre no fim** das ordenações por
-duração e um indicador `⏳ analisando vídeos… x/y` aparece nas abas.
+The UI has **General · ★ Favorites · Images · GIFs · Videos** tabs (with
+counters) and a per-tab sort selector. Video durations are extracted with
+`ffprobe` in background (2 at a time) and cached in `/data/thumbs/meta.json` —
+while the analysis runs, videos without duration stay **at the end** of
+duration sortings and a `⏳ analyzing videos… x/y` indicator shows in the tabs.
 
-| Aba | Ordenações disponíveis | Padrão |
+| Tab | Available sortings | Default |
 |---|---|---|
-| Geral | recentes, antigos, tamanho ↑↓, nome | Recentes |
-| Imagens / GIFs | tamanho ↑↓, recentes, antigos, nome | **Menores primeiro** (carregam mais rápido) |
-| Vídeos | duração ↑↓, tamanho ↑↓, recentes, nome | **Duração curta → longa** |
+| General | newest, oldest, size ↑↓, name | Newest |
+| Images / GIFs | size ↑↓, newest, oldest, name | **Smallest first** (loads faster) |
+| Videos | duration ↑↓, size ↑↓, newest, name | **Short → long** |
 
-**Modo aleatório (🔀)**: ligado por padrão — todas as mídias aparecem em ordem
-embaralhada como apresentação. O embaralhamento usa um **seed determinístico**
-(`?rand=1&seed=N`): a mesma seed reproduz exatamente a mesma ordem em todas as
-páginas, então o scroll infinito continua estável. Clique no 🔀 para desligar e
-voltar às ordenações normais (a preferência fica em `localStorage`).
+**Random mode (🔀)**: on by default — all media appears in shuffled order like a
+slideshow. Shuffling uses a **deterministic seed** (`?rand=1&seed=N`): the same
+seed reproduces exactly the same order on every page, so infinite scroll stays
+stable. Click 🔀 to disable and go back to normal sortings (preference kept in
+`localStorage`).
 
-**Favoritos (★)**: cada card e o lightbox têm uma estrela; favoritos são
-persistidos no servidor (`/data/thumbs/favorites.json`) e aparecem na aba
-**★ Favoritos**. Endpoint: `POST /api/fav/{name}`.
+**Favorites (★)**: every card and the lightbox have a star; favorites are
+persisted on the server (`/data/thumbs/favorites.json`) and appear in the
+**★ Favorites** tab. Endpoint: `POST /api/fav/{name}`.
 
-No lightbox: vídeos **reiniciam em loop infinito**, imagens suportam **zoom por
-pinch** (1x–4x) com pan de 1 dedo, duplo toque alterna 1x ↔ 2x ancorado no
-ponto e a roda do mouse também dá zoom — com zoom ativo, o swipe arrasta a
-imagem em vez de navegar.
+In the lightbox: videos **loop forever**, images support **pinch zoom**
+(1x–4x) with 1-finger pan, double-tap toggles 1x ↔ 2x anchored at the point
+and the mouse wheel zooms too — with zoom active, swiping drags the image
+instead of navigating.
 
-Thumbs fora da tela (±1500px) têm o `src` liberado para economizar RAM do
-celular e recarregam ao voltar; a geração de thumbs é limitada a 2 simultâneas.
+Thumbs off-screen (±1500px) have their `src` released to save mobile RAM and
+reload when returning; thumb generation is limited to 2 concurrent jobs.
 
-Aba/ordem ficam na URL (`?tab=videos&sort=duration_asc`) para sobreviver a
-refresh e ao botão voltar; a ordem escolhida é lembrada por aba
-(`localStorage`). GIFs têm aba própria (`image/gif`); HEIC/TIFF só aparecem no
-Geral porque o navegador não renderiza.
+Tab/order live in the URL (`?tab=videos&sort=duration_asc`) to survive refresh
+and the back button; the chosen order is remembered per tab (`localStorage`).
+GIFs have their own tab (`image/gif`); HEIC/TIFF only appear in General because
+the browser can't render them.
 
-Endpoints: `GET /api/items?category=all|fav|image|gif|video&sort=recent|oldest|size_asc|size_desc|duration_asc|duration_desc|name|random&seed=&offset=&limit=` e `GET /api/stats` (contadores + progresso da análise).
+Endpoints: `GET /api/items?category=all|fav|image|gif|video&sort=recent|oldest|size_asc|size_desc|duration_asc|duration_desc|name|random&seed=&offset=&limit=` and `GET /api/stats` (counters + analysis progress).
 
-### Tags, nomes e filtro multi-tag
+### Tags, names and multi-tag filter
 
-Cada mídia tem um sidecar `.meta/{id}_{md5}.json` com as tags do Sankaku,
-gravado pelo downloader via postprocessor `metadata` do gallery-dl e
-recolhido para `.meta/` pelo `strip-ext.sh` + varredura do entrypoint. O
-viewer ingere os sidecars para um índice central em `/data/thumbs/tags.db`
-(SQLite write-through: cada edição é 1 `UPDATE`, nunca reescrita).
+Every media has a `.meta/{id}_{md5}.json` sidecar with the source tags, written
+by the downloader via gallery-dl's `metadata` postprocessor and collected into
+`.meta/` by `strip-ext.sh` + the entrypoint scan. The viewer ingests sidecars
+into a central index in `/data/thumbs/tags.db` (SQLite write-through: each edit
+is 1 `UPDATE`, never a rewrite).
 
-**Opacidade (+18)**: mídias sem extensão e com nomes `id_md5`, sidecars em
-dir oculta, thumbs sem extensão, `umask` restritivo e grupo compartilhado
-`vault` (gid 2000, viewer uid 20000): só os containers leem — o desktop não
-abre nem pre-visualiza sem sudo. `.nomedia` nas duas árvores afasta
-indexadores (Android/Plex).
+**Privacy design**: extensionless media with `id_md5` names, sidecars in a
+hidden dir, extensionless thumbs, restrictive `umask` and the shared `vault`
+group (gid 2000, viewer uid 20000): only the containers read them — the desktop
+can't open or preview without sudo. `.nomedia` in both trees keeps indexers
+(Android/Plex) away.
 
-- **Pesquisa = filtro**: um campo só no topo; Enter empilha N tags (AND sobre
-  tags da fonte + personalizadas). Normalização: minúsculas, espaços→`_`.
-  URL compartilhável: `?tags=a+b`.
-- **Autocomplete**: `GET /api/tags?prefix=&limit=20` (top por frequência).
-- **Tags personalizadas**: no lightbox, `POST /api/ctag/{name}` com
-  `{"add":[],"del":[]}`. Sobrevivem à re-ingestão (fonte e customs separados).
+- **Search = filter**: a single field on top; Enter stacks N tags (AND over
+  source tags + custom ones). Normalization: lowercase, spaces → `_`.
+  Shareable URL: `?tags=a+b`.
+- **Autocomplete**: `GET /api/tags?prefix=&limit=20` (top by frequency).
+- **Custom tags**: in the lightbox, `POST /api/ctag/{name}` with
+  `{"add":[],"del":[]}`. They survive re-ingestion (source and custom are kept separate).
 
 ```bash
-# backfill de tags p/ acervo baixado antes dos sidecars (idempotente,
-# pula quem já tem .json; N opcional limita a quantidade)
+# backfill tags for media downloaded before sidecars existed (idempotent,
+# skips what already has a .json; optional N limits the amount)
 docker compose run --rm --entrypoint /app/backfill-tags.sh downloader [N]
 ```
 
-Nota de escala: só as tags usam SQLite (era o único estado que estourava o
-teto: rewrite integral de 12–18MB por edição @20k mídias). `favorites.json`,
-`filecache.json` e `meta.json` continuam JSON — reavaliar (tabela no mesmo
-`.db`) se algum rewrite ficar perceptível.
+Scale note: only tags use SQLite (it was the only state blowing the ceiling:
+full rewrites of 12–18MB per edit @20k media). `favorites.json`,
+`filecache.json` and `meta.json` remain JSON — revisit (table in the same
+`.db`) if any rewrite becomes noticeable.
 
-### Painel de download (engrenagem ⚙)
+### Download panel (gear ⚙)
 
-Mostra fase, taxa, sessão e vault (heartbeat em
-`/data/media/.download-status.json`) + controles: **Iniciar** (full ou
-incremental), **Parar** e **Verificar** (saúde + consistência
-mídia↔sidecar). Sem socket docker: a UI escreve em `/data/db/.uictrl` e o
-**autosync executa** (precisa estar no ar — sem ele, Iniciar responde 503).
-Incremental pula baixados e para após **5 seguidos** (`skip=abort:5`) ou no
-fim da lista. Endpoints: `GET /api/download/status`, `POST
+Shows phase, rate, session and vault (heartbeat in
+`/data/media/.download-status.json`) + controls: **Start** (full or
+incremental), **Stop** and **Verify** (health + media↔sidecar consistency).
+No docker socket: the UI writes to `/data/db/.uictrl` and the **autosync
+executes** (must be up — without it, Start answers 503). Incremental skips
+already-downloaded items and stops after **5 in a row** (`skip=abort:5`) or at
+the end of the list. Endpoints: `GET /api/download/status`, `POST
 /api/download/start|stop`, `GET /api/download/verify`.
 
-### Sync automático diário
+### Daily automatic sync
 
-O serviço `autosync` roda sempre (restart: unless-stopped) e dispara um **sync
-incremental** todo dia às **04:00** (`AUTOSYNC_HOUR` no `.env` para mudar).
-Antes de rodar ele verifica o heartbeat do painel: se já houver um download
-ativo (manual ou do próprio autosync), adia 30 min sozinho. Um lock por `mkdir` em
-`/data/db/.autosync-lock` impede duas instâncias simultâneas (lock obsoleto de
-restart sujo é limpo no boot). Logs:
-`docker compose logs -f autosync`. Para desativar: `docker compose stop autosync`.
+The `autosync` service always runs (restart: unless-stopped) and fires an
+**incremental sync** every day at **04:00** (`AUTOSYNC_HOUR` in `.env` to
+change). Before running, it checks the panel heartbeat: if a download is
+already active (manual or autosync itself), it defers 30 min. An `mkdir` lock
+in `/data/db/.autosync-lock` prevents two simultaneous instances (stale lock
+from a dirty restart is cleaned at boot). Logs:
+`docker compose logs -f autosync`. To disable: `docker compose stop autosync`.
 
-> **Sem backups por decisão consciente do dono** (2026-09-17): cópia é prova
-> espalhada, e só ele opera docker aqui. Preço: morte do disco raiz = perda
-> total do vault. Não recriar rotina de backup sem ordem explícita.
+> **No backups by conscious owner decision (2026-09-17)**: a copy is scattered
+> evidence, and only the owner operates docker here. Price: root disk death =
+> total vault loss. Do not recreate a backup routine without an explicit order.
 
-### Homelab e opacidade (+18)
+### Storage and privacy design
 
-Desenho: dado vivo em **volumes Docker** (não em pastas). Por quê:
-`/var/lib/docker` é `drwx--x--- root` — o desktop nem lista o conteúdo, e
-visualizadores/indexadores (Nautilus, Plex, apps de foto) nunca olham para
-lá; somado às perms do projeto (640/2750 `root:vault`, thumbs 600 uid
-20000), olhada casual e thumbnail automático morrem em 2 barreiras.
+Design: live data in **Docker volumes** (not folders). Why:
+`/var/lib/docker` is `drwx--x--- root` — the desktop can't even list the
+contents, and viewers/indexers (Nautilus, Plex, photo apps) never look there;
+on top of the project perms (640/2750 `root:vault`, thumbs 600 uid 20000),
+casual browsing and automatic thumbnailing die at 2 barriers.
 
-Alternativa (não recomendada por padrão): bind mounts com `*_BIND` no `.env`
-— dado vivo direto no homelab, zero restore, mas a pasta existe e as perms
-viram a única barreira:
+Alternative (not recommended by default): bind mounts with `*_BIND` in `.env`
+— live data directly in the homelab, zero restore, but the folder exists and
+perms become the only barrier:
 
 ```
-<disco>/docker/zub-vault/   <- este repo
-  media/ thumbs/ db/        <- dados (criados no 1º up com bind)
+<disk>/docker/eajdias-vault/   <- this repo
+  media/ thumbs/ db/           <- data (created on 1st up with bind)
 ```
 
-`.env` (não versionado):
+`.env` (not versioned):
 
 ```bash
-MEDIA_BIND=<disco>/docker/zub-vault/media
-THUMBS_BIND=<disco>/docker/zub-vault/thumbs
-DB_BIND=<disco>/docker/zub-vault/db
+MEDIA_BIND=<disk>/docker/eajdias-vault/media
+THUMBS_BIND=<disk>/docker/eajdias-vault/thumbs
+DB_BIND=<disk>/docker/eajdias-vault/db
 ```
 
-Antes do 1º up com bind (uma vez; IDs reservados: grupo `vault` gid 2000,
-usuário do viewer uid 20000 — não use esses IDs para mais nada no host):
+Before the 1st up with bind (once; reserved IDs: `vault` group gid 2000,
+viewer user uid 20000 — don't use these IDs for anything else on the host):
 
 ```bash
 mkdir -p media thumbs db
 chgrp 2000 media thumbs db && chmod 2750 media && chmod 700 thumbs db
 ```
 
-No up seguinte o entrypoint converge o resto (arquivos 640 `root:vault`,
-dirs com setgid). Migração a partir dos volumes nomeados:
+On the next up the entrypoint converges the rest (files 640 `root:vault`,
+dirs with setgid). Migration from named volumes:
 
 ```bash
 docker compose stop viewer
-# copia o CONTEÚDO de cada volume p/ a pasta irmã (rode 1x por volume):
-docker run --rm -v sank-vault_vault_media:/src -v <disco>/docker/zub-vault/media:/dst alpine sh -c 'cp -a /src/. /dst/'
-docker run --rm -v sank-vault_vault_db:/src -v <disco>/docker/zub-vault/db:/dst alpine sh -c 'cp -a /src/. /dst/'
-docker run --rm -v sank-vault_vault_thumbs:/src -v <disco>/docker/zub-vault/thumbs:/dst alpine sh -c 'cp -a /src/. /dst/'
-docker compose up -d   # entrypoint ajusta dono/grupo/perms sozinho
+# copy the CONTENTS of each volume to the sibling folder (run 1x per volume):
+docker run --rm -v sank-vault_vault_media:/src -v <disk>/docker/eajdias-vault/media:/dst alpine sh -c 'cp -a /src/. /dst/'
+docker run --rm -v sank-vault_vault_db:/src -v <disk>/docker/eajdias-vault/db:/dst alpine sh -c 'cp -a /src/. /dst/'
+docker run --rm -v sank-vault_vault_thumbs:/src -v <disk>/docker/eajdias-vault/thumbs:/dst alpine sh -c 'cp -a /src/. /dst/'
+docker compose up -d   # entrypoint adjusts owner/group/perms by itself
 ```
 
-O que a opacidade cobre e o que não cobre:
+What the privacy design covers and doesn't:
 
-- ✅ Cobre: olhada casual no gerenciador de arquivos (sem extensão, nomes
-  `id_md5`, dir oculta p/ sidecars, 640/750 fora do seu usuário → sem
-  thumbnail nem preview) e indexadores (Plex/Jellyfin/Android pulam sem
-  extensão + `.nomedia`).
-- ❌ Não cobre: acesso **determinado** (root/sudo no host abre tudo) nem
-  compartilhamento com squash/all-access (SMB com `force user` ou guest
-  ignora perms do Linux — o desktop enxerga tudo). Limitação assumida.
+- ✅ Covers: casual look in the file manager (no extension, `id_md5` names,
+  hidden dir for sidecars, 640/750 outside your user → no thumbnail or
+  preview) and indexers (Plex/Jellyfin/Android skip extensionless files +
+  `.nomedia`).
+- ❌ Doesn't cover: **determined** access (root/sudo on the host opens
+  everything) nor sharing with squash/all-access (SMB with `force user` or
+  guest ignores Linux perms — the desktop sees everything). Assumed limitation.
 
-## Variáveis (opcionais — padrões hardcoded)
+## Variables (optional — hardcoded defaults)
 
 `SANKAKU_USER`, `SANKAKU_PASS`, `FAV_TAG` (default `zubirous`), `SYNC_MODE`
-(`full` é o padrão: varre a lista inteira até o fim, pulando o que já está no
-archive; `incremental` para cedo ao achar mídia já baixada — sync rápido),
-`VIEWER_PASSWORD` (default `Zubvault@123`), `AUTOSYNC_HOUR` (hora do sync automático, default `04:00`).
+(`full` is the default: scans the whole list to the end, skipping what's
+already in the archive; `incremental` stops early when it finds already
+downloaded media — fast sync), `VIEWER_PASSWORD` (default `Zubvault@123`),
+`AUTOSYNC_HOUR` (auto sync hour, default `04:00`).
 
-## Comandos úteis
+> The default config follows the Sankaku Channel extractor; gallery-dl
+> supports hundreds of sites, so point the config at any source you want.
+
+## Useful commands
 
 ```bash
-# teste rápido com poucos arquivos
+# quick test with few files
 docker compose run --rm -e GDL_EXTRA_ARGS="--range 1-3 --sleep-request 1" downloader
 
-# conferir o que foi baixado (nomes sem extensão)
+# check what was downloaded (extensionless names)
 docker compose run --rm --entrypoint sh downloader -c 'ls -la /data/media | head'
 
-# sync rápido (para no 1º item já baixado)
+# fast sync (stops at the 1st already-downloaded item)
 docker compose run --rm -e SYNC_MODE=incremental downloader
 
-# ver logs do viewer
+# watch viewer logs
 docker compose logs -f viewer
 ```
 
-## Estrutura
+## Structure
 
 ```
 downloader/   Dockerfile, entrypoint.sh, strip-ext.sh, gallery-dl.conf
-viewer/       servidor Go (main, sniff, thumbs, auth) + static/ (UI)
+viewer/       Go server (main, sniff, thumbs, auth) + static/ (UI)
 docker-compose.yml
 ```

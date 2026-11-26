@@ -1,6 +1,6 @@
 #!/bin/sh
 # zub-vault :: downloader
-# Baixa os favoritos do Sankaku com deduplicacao por SQLite e remove
+# Downloads favorites via gallery-dl with SQLite dedup, then strips
 # a extensao dos arquivos logo apos cada download (via postprocessor).
 #
 # Alem disso publica um heartbeat em /data/media/.download-status.json
